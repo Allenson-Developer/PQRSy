@@ -1,0 +1,153 @@
+/* RESET GLOBAL */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  overflow-x: hidden;
+}
+
+/*  HOME FULL SCREEN */
+.home {
+  width: 100%;
+  min-height: 100vh;
+
+  background:
+    linear-gradient(
+      rgba(0, 0, 0, 0.75),
+      rgba(0, 0, 0, 0.85)
+    ),
+    url("https://images.unsplash.com/photo-1521791136064-7986c2920216")
+    no-repeat center center/cover;
+
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
+  padding: 20px;
+}
+
+/*  CONTENEDOR */
+.overlay {
+  text-align: center;
+  color: white;
+
+  backdrop-filter: blur(8px);
+
+  padding: 60px 70px;
+
+  border-radius: 20px;
+
+  background: rgba(0, 0, 0, 0.45);
+
+  box-shadow:
+    0px 10px 40px rgba(0, 0, 0, 0.7);
+
+  max-width: 650px;
+  width: 100%;
+}
+
+/*  TITULO */
+.overlay h1 {
+  font-size: 72px;
+  letter-spacing: 4px;
+  margin-bottom: 15px;
+}
+
+/*  SUBTITULO */
+.overlay p {
+  font-size: 20px;
+  color: #ddd;
+  margin-bottom: 45px;
+  line-height: 1.5;
+}
+
+/*  BOTONES */
+.buttons {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/*  BOTONES BASE */
+.buttons button {
+  padding: 15px 40px;
+
+  font-size: 14px;
+
+  border: none;
+
+  cursor: pointer;
+
+  border-radius: 40px;
+
+  transition: all 0.3s ease;
+
+  font-weight: bold;
+}
+
+/*  BOTON REGISTRO */
+.buttons button:first-child {
+  background: #f4c430;
+  color: black;
+}
+
+/*  BOTON LOGIN */
+.buttons button:last-child {
+  background: transparent;
+  border: 2px solid white;
+  color: white;
+}
+
+/*  HOVER */
+.buttons button:hover {
+  transform: translateY(-3px) scale(1.05);
+}
+
+/*  GLOW */
+.buttons button:first-child:hover {
+  box-shadow: 0 0 18px #f4c430;
+}
+
+.buttons button:last-child:hover {
+  background: white;
+  color: black;
+}
+
+/*  LOGO */
+.logo {
+  background: linear-gradient(90deg, #f4c430, #ffffff);
+
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/*  RESPONSIVE */
+@media (max-width: 768px) {
+  .overlay {
+    padding: 40px 30px;
+  }
+
+  .overlay h1 {
+    font-size: 50px;
+  }
+
+  .overlay p {
+    font-size: 16px;
+  }
+
+  .buttons {
+    flex-direction: column;
+  }
+
+  .buttons button {
+    width: 100%;
+  }
+}

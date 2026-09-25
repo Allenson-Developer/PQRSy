@@ -1,0 +1,105 @@
+.register-page {
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(6px);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.register-box {
+  width: 400px;
+  padding: 40px;
+  border-radius: 15px;
+  background: rgba(20, 20, 20, 0.95);
+  color: white;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8);
+}
+
+/* TITULO */
+.register-box h2 {
+  margin-bottom: 20px;
+}
+
+/* SUBTEXTO */
+.subtitle {
+  color: #bbb;
+  margin-bottom: 20px;
+}
+
+/* BOTONES */
+.roles {
+  display: flex;
+  gap: 10px;
+}
+
+.roles button {
+  flex: 1;
+  padding: 12px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  font-weight: bold;
+  background: #2a2a2a;
+  color: white;
+}
+
+.roles .admin {
+  background: #f4c430;
+  color: black;
+}
+
+/* FORM */
+.form {
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* INPUTS */
+.form input {
+  padding: 12px;
+  border-radius: 8px;
+  border: none;
+  background: #2a2a2a;
+  color: white;
+  outline: none;
+}
+
+/* BOTON */
+.form button {
+  margin-top: 10px;
+  padding: 14px;
+  border-radius: 30px;
+  border: none;
+  background: linear-gradient(90deg, #f4c430, #ffdd55);
+  color: black;
+  font-weight: bold;
+  cursor: pointer;
+  transition: 0.3s;
+}
+
+.form button:hover {
+  transform: scale(1.05);
+  box-shadow: 0 0 15px #f4c430;
+}
+
+/* VOLVER */
+.back {
+  margin-top: 10px;
+  font-size: 14px;
+  cursor: pointer;
+  color: #ccc;
+}
+
+/* LINK */
+.login-link {
+  margin-top: 20px;
+  text-align: center;
+}
+
+.login-link span {
+  cursor: pointer;
+  font-weight: bold;
+}
