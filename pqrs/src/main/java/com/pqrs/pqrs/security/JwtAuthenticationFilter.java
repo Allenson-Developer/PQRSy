@@ -32,9 +32,7 @@ public class JwtAuthenticationFilter
         String authHeader =
                 request.getHeader("Authorization");
 
-        System.out.println(
-                "AUTH HEADER: " + authHeader
-        );
+
 
         if (
                 authHeader != null
@@ -50,9 +48,7 @@ public class JwtAuthenticationFilter
                         jwtService.isTokenExpired(token)
                 ) {
 
-                    System.out.println(
-                            "TOKEN EXPIRADO"
-                    );
+                
 
                     filterChain.doFilter(
                             request,
@@ -68,10 +64,6 @@ public class JwtAuthenticationFilter
                 String role =
                         jwtService.extractRole(token);
 
-                System.out.println(
-                        "USUARIO JWT: "
-                                + username
-                );
 
                 UsernamePasswordAuthenticationToken authentication =
                         new UsernamePasswordAuthenticationToken(
@@ -84,7 +76,10 @@ public class JwtAuthenticationFilter
                                 )
                         );
 
-                SecurityContextHolder
+                        SecurityContextHolder.getContext()
+                              .setAuthentication(authentication);
+
+                 SecurityContextHolder
                         .getContext()
                         .setAuthentication(authentication);
 

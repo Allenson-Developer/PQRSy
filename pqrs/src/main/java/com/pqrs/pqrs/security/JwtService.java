@@ -1,8 +1,10 @@
 package com.pqrs.pqrs.security;
 
+import java.nio.charset.StandardCharsets;
 import java.security.Key;
 import java.util.Date;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import com.pqrs.pqrs.model.Usuario;
@@ -14,116 +16,53 @@ import io.jsonwebtoken.security.Keys;
 @Service
 public class JwtService {
 
-    //////////////////////////////////////////////////////
-    // CLAVE SECRETA
-    //////////////////////////////////////////////////////
-
-    private static final String SECRET_KEY =
-            "pqrs_jwt_secret_key_2026_super_segura_para_proyecto";
-
-    //////////////////////////////////////////////////////
-    // KEY
-    //////////////////////////////////////////////////////
+    @Value("${jwt.secret}")
+    private String secretKey;
 
     private Key getSigningKey() {
-
         return Keys.hmacShaKeyFor(
-                SECRET_KEY.getBytes()
+                secretKey.getBytes(StandardCharsets.UTF_8)
         );
     }
 
-    //////////////////////////////////////////////////////
-    // GENERAR TOKEN
-    //////////////////////////////////////////////////////
-
-    public String generarToken(
-            Usuario usuario
-    ) {
+    public String generarToken(Usuario usuario) {
 
         return Jwts.builder()
-
-                .setSubject(
-                        usuario.getUsername()
-                )
-
-                .claim(
-                        "role",
-                        usuario.getRole()
-                )
-
-                .claim(
-                        "estado",
-                        usuario.getEstado()
-                )
-
-                .setIssuedAt(
-                        new Date()
-                )
-
+                .setSubject(usuario.getUsername())
+                .claim("role", usuario.getRole())
+                .claim("estado", usuario.getEstado())
+                .setIssuedAt(new Date())
                 .setExpiration(
                         new Date(
                                 System.currentTimeMillis()
                                         + 1000L * 60 * 60 * 24
                         )
                 )
-
-                .signWith(
-                        getSigningKey()
-                )
-
+                .signWith(getSigningKey())
                 .compact();
     }
 
-    //////////////////////////////////////////////////////
-    // OBTENER USERNAME
-    //////////////////////////////////////////////////////
-
-    public String extractUsername(
-            String token
-    ) {
-
-        return extractClaims(token)
-                .getSubject();
+    public String extractUsername(String token) {
+        return extractClaims(token).getSubject();
     }
 
-    //////////////////////////////////////////////////////
-    // OBTENER CLAIMS
-    //////////////////////////////////////////////////////
-
-    public Claims extractClaims(
-            String token
-    ) {
+    public Claims extractClaims(String token) {
 
         return Jwts.parserBuilder()
-
-                .setSigningKey(
-                        getSigningKey()
-                )
-
+                .setSigningKey(getSigningKey())
                 .build()
-
-                .parseClaimsJws(
-                        token
-                )
-
+                .parseClaimsJws(token)
                 .getBody();
- }
+    }
 
-     public String extractRole(
-        String token
-   ) {
+    public String extractRole(String token) {
+        return extractClaims(token)
+                .get("role", String.class);
+    }
 
-    return extractClaims(token)
-             .get("role", String.class);
-   }
-
-   public boolean isTokenExpired(
-        String token
- ) {
-
-    return extractClaims(token)
-            .getExpiration()
-            .before(new Date());
- }
-
+    public boolean isTokenExpired(String token) {
+        return extractClaims(token)
+                .getExpiration()
+                .before(new Date());
+    }
 }

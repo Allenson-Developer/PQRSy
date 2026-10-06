@@ -1,9 +1,10 @@
 package com.pqrs.pqrs.model;
 
 import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.mapping.Document;
-import com.fasterxml.jackson.annotation.JsonProperty;
 import org.springframework.data.mongodb.core.index.Indexed;
+import org.springframework.data.mongodb.core.mapping.Document;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 @Document(collection = "usuarios")
 public class Usuario {
@@ -32,6 +33,9 @@ public class Usuario {
  
     @Indexed(unique = true)
     private String username;
+
+    @Indexed(unique = true, sparse = true)
+    private String email;
 
     @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     private String password;
@@ -142,6 +146,17 @@ public class Usuario {
 
         this.estado = estado;
     }
+
+    public String getEmail() {
+
+    return email;
+}
+
+     public void setEmail(String email) {
+
+     this.email = email;
+
+    } 
 
     //////////////////////////////////////////////////////
     // NOMBRE COMPLETO

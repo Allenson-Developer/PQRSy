@@ -5,6 +5,7 @@ import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -28,57 +29,130 @@ public class SecurityConfig {
     ) throws Exception {
 
         http
-
-                //////////////////////////////////////////////////////
                 // DESACTIVAR CSRF
-                //////////////////////////////////////////////////////
-
                 .csrf(csrf -> csrf.disable())
 
-                //////////////////////////////////////////////////////
                 // ACTIVAR CORS
-                //////////////////////////////////////////////////////
-
                 .cors(Customizer.withDefaults())
 
-                //////////////////////////////////////////////////////
                 // SIN SESIONES
-                //////////////////////////////////////////////////////
-
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(
                                 SessionCreationPolicy.STATELESS
                         )
                 )
 
-                //////////////////////////////////////////////////////
                 // AUTORIZACIÓN
-                //////////////////////////////////////////////////////
-
                 .authorizeHttpRequests(auth -> auth
 
-                        //////////////////////////////////////////////////////
+                        // ==============================
                         // RUTAS PÚBLICAS
-                        //////////////////////////////////////////////////////
+                        // ==============================
 
                         .requestMatchers(
                                 "/test/login",
                                 "/test/register"
-                        )
-                        .permitAll()
+                        ).permitAll()
 
-                        //////////////////////////////////////////////////////
-                        // RUTAS PROTEGIDAS
-                        //////////////////////////////////////////////////////
+                        // ==============================
+                        // PERFIL DE USUARIO
+                        // ==============================
+
+                        .requestMatchers(
+                                HttpMethod.PUT,
+                                "/test/actualizar/**"
+                        ).authenticated()
+
+                        // ==============================
+                        // RUTAS ADMIN
+                        // ==============================
 
                         .requestMatchers("/admin/**")
                         .hasRole("ADMIN")
 
-                        .requestMatchers("/user/**")
-                        .hasRole("USER")
+                       .requestMatchers(
+                        HttpMethod.GET,
+                          "/pqrs/todas",
+                        "/pqrs/estadisticas-global",
+                        "/pqrs/dashboard",
+                        "/pqrs/prioridad/*",
+                        "/pqrs/estado/*/prioridad/*"
+                        ).hasRole("ADMIN")
+
+                        .requestMatchers(
+                                HttpMethod.PUT,
+                                "/pqrs/*/estado",
+                                "/pqrs/*/asignar",
+                                "/pqrs/*/gestion-completa"
+                        ).hasRole("ADMIN")
+
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/pqrs/*/historial-admin"
+                        ).hasRole("ADMIN")
+
+                        // ==============================
+                        // RUTAS USER
+                        // ==============================
+
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/pqrs"
+                        ).hasRole("USER")
+
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/pqrs/usuario/**",
+                                "/pqrs/estadisticas/**"
+                        ).hasRole("USER")
+
+                        .requestMatchers(
+                                HttpMethod.PUT,
+                                "/pqrs/*"
+                        ).hasRole("USER")
+
+                        .requestMatchers(
+                                HttpMethod.DELETE,
+                                "/pqrs/*"
+                        ).hasRole("USER")
+
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/pqrs/*/historial"
+                        ).hasRole("USER")
+
+                        // ==============================
+                        // RUTAS COMPARTIDAS
+                        // ==============================
+
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/pqrs/detalle/**",
+                                "/pqrs/archivo/**"
+                        ).authenticated()
+
+                        /*
+                         * RESPONDER:
+                         * Actualmente el frontend USER utiliza este endpoint
+                         * y el backend también lo permite como una respuesta
+                         * genérica. Por ahora queda para cualquier usuario
+                         * autenticado.
+                         */
+                        .requestMatchers(
+                                HttpMethod.PUT,
+                                "/pqrs/*/responder"
+                        ).authenticated()
+
+                        // ==============================
+                        // AGENTE
+                        // ==============================
 
                         .requestMatchers("/agente/**")
                         .hasRole("AGENTE")
+
+                        // ==============================
+                        // FALLBACK
+                        // ==============================
 
                         .requestMatchers("/pqrs/**")
                         .authenticated()
@@ -87,10 +161,7 @@ public class SecurityConfig {
                         .denyAll()
                 );
 
-        //////////////////////////////////////////////////////
         // FILTRO JWT
-        //////////////////////////////////////////////////////
-
         http.addFilterBefore(
                 jwtAuthenticationFilter,
                 UsernamePasswordAuthenticationFilter.class
@@ -99,9 +170,9 @@ public class SecurityConfig {
         return http.build();
     }
 
-    //////////////////////////////////////////////////////
+    // ==============================
     // CONFIGURACIÓN CORS
-    //////////////////////////////////////////////////////
+    // ==============================
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
@@ -109,17 +180,9 @@ public class SecurityConfig {
         CorsConfiguration configuration =
                 new CorsConfiguration();
 
-        //////////////////////////////////////////////////////
-        // ORIGINS
-        //////////////////////////////////////////////////////
-
         configuration.setAllowedOrigins(
                 List.of("*")
         );
-
-        //////////////////////////////////////////////////////
-        // MÉTODOS
-        //////////////////////////////////////////////////////
 
         configuration.setAllowedMethods(
                 List.of(
@@ -132,25 +195,11 @@ public class SecurityConfig {
                 )
         );
 
-        //////////////////////////////////////////////////////
-        // HEADERS
-        //////////////////////////////////////////////////////
-
         configuration.setAllowedHeaders(
                 List.of("*")
         );
 
-        //////////////////////////////////////////////////////
-        // CREDENTIALS
-        //////////////////////////////////////////////////////
-
-        configuration.setAllowCredentials(
-                false
-        );
-
-        //////////////////////////////////////////////////////
-        // SOURCE
-        //////////////////////////////////////////////////////
+        configuration.setAllowCredentials(false);
 
         UrlBasedCorsConfigurationSource source =
                 new UrlBasedCorsConfigurationSource();

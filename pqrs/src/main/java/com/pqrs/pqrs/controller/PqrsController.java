@@ -14,6 +14,8 @@ import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -46,6 +48,39 @@ public class PqrsController {
 
     @Autowired
     private HistorialPQRSRepository historialRepo;
+
+  //////////////////////////////////////////////////////
+  // SEGURIDAD - USUARIO AUTENTICADO
+  //////////////////////////////////////////////////////
+
+   private Usuario obtenerUsuarioAutenticado() {
+
+    Authentication auth =
+            SecurityContextHolder.getContext().getAuthentication();
+
+    if (auth == null || !auth.isAuthenticated()) {
+        return null;
+    }
+
+    return usuarioRepo.findByUsername(auth.getName()).orElse(null);
+   }
+
+   private boolean esAdmin() {
+
+    Usuario usuario = obtenerUsuarioAutenticado();
+
+    return usuario != null
+            && "ADMIN".equalsIgnoreCase(usuario.getRole());
+ }
+
+   private boolean esPropietario(String usuarioId) {
+
+    Usuario usuario = obtenerUsuarioAutenticado();
+
+    return usuario != null
+            && usuario.getId() != null
+            && usuario.getId().equals(usuarioId);
+}
 
     //////////////////////////////////////////////////////
     // TEST
@@ -152,14 +187,6 @@ public class PqrsController {
             new Date()
            );
           }
-
-            if (pqrs.getFechaPrimeraRespuesta() == null) {
-
-            pqrs.setFechaPrimeraRespuesta(
-            new Date()
-          );
-}
-
             repo.save(pqrs);
 
             HistorialPQRS historial = new HistorialPQRS();
@@ -189,16 +216,35 @@ public class PqrsController {
     // LISTAR POR USUARIO
     //////////////////////////////////////////////////////
     @GetMapping("/usuario/{usuarioId}")
-    public ResponseEntity<List<Pqrs>> listarPorUsuario(@PathVariable String usuarioId) {
-        return ResponseEntity.ok(repo.findByUsuarioId(usuarioId));
+    public ResponseEntity<?> listarPorUsuario(@PathVariable String usuarioId) {
+
+    if (!esAdmin() && !esPropietario(usuarioId)) {
+        return ResponseEntity.status(403)
+                .body("No tienes permiso para consultar las PQRS de este usuario");
     }
 
-    @GetMapping("/usuario/{usuarioId}/estado")
-    public ResponseEntity<List<Pqrs>> filtrarPorEstado(@PathVariable String usuarioId, @RequestParam String estado) {
-        List<Pqrs> lista = repo.findByUsuarioId(usuarioId);
-        List<Pqrs> filtradas = lista.stream().filter(p -> p.getEstado().equalsIgnoreCase(estado)).toList();
-        return ResponseEntity.ok(filtradas);
+    return ResponseEntity.ok(repo.findByUsuarioId(usuarioId));
+  }
+
+   @GetMapping("/usuario/{usuarioId}/estado")
+       public ResponseEntity<?> filtrarPorEstado(
+        @PathVariable String usuarioId,
+        @RequestParam String estado) {
+
+        if (!esAdmin() && !esPropietario(usuarioId)) {
+         return ResponseEntity.status(403)
+                .body("No tienes permiso para consultar las PQRS de este usuario");
     }
+
+    List<Pqrs> lista = repo.findByUsuarioId(usuarioId);
+
+    List<Pqrs> filtradas = lista.stream()
+            .filter(p -> p.getEstado() != null
+                    && p.getEstado().equalsIgnoreCase(estado))
+            .toList();
+
+    return ResponseEntity.ok(filtradas);
+  }
 
 
    @GetMapping("/prioridad/{prioridad}")
@@ -234,81 +280,166 @@ public class PqrsController {
 
 
 
-    //////////////////////////////////////////////////////
-    // EDITAR PQRS
-    //////////////////////////////////////////////////////
-    @PutMapping("/{id}")
-    public ResponseEntity<?> actualizar(@PathVariable String id, @RequestBody Pqrs datos) {
-        try {
-            Optional<Pqrs> pqrsOpt = repo.findById(id);
-            if (pqrsOpt.isEmpty()) return ResponseEntity.status(404).body("PQRS no encontrada");
+ //////////////////////////////////////////////////////
+ // EDITAR PQRS
+  //////////////////////////////////////////////////////
+  @PutMapping("/{id}")
+  public ResponseEntity<?> actualizar(
+        @PathVariable String id,
+        @RequestBody Pqrs datos) {
 
-            Pqrs pqrs = pqrsOpt.get();
-            String estadoAnterior = pqrs.getEstado();
+     try {
 
-            if (datos.getTipo() != null) pqrs.setTipo(datos.getTipo());
-            if (datos.getDescripcion() != null) pqrs.setDescripcion(datos.getDescripcion());
-            if (datos.getEstado() != null) pqrs.setEstado(datos.getEstado());
+        Optional<Pqrs> pqrsOpt = repo.findById(id);
 
-            repo.save(pqrs);
-
-            if (datos.getEstado() != null && !estadoAnterior.equalsIgnoreCase(datos.getEstado())) {
-                HistorialPQRS historial = new HistorialPQRS();
-                historial.setPqrsId(pqrs.getId());
-                historial.setAccion("ACTUALIZACION");
-                historial.setEstadoAnterior(estadoAnterior);
-                historial.setEstadoNuevo(datos.getEstado().toUpperCase());
-                historial.setFecha(new Date());
-                historial.setResponsable("Sistema");
-                historial.setComentarioInterno("PQRS actualizada manualmente.");
-                historial.setMensajeCliente("Tu PQRS fue actualizada.");
-                historial.setVisibleCliente(true);
-                historial.setDetalle(estadoAnterior + " → " + datos.getEstado().toUpperCase());
-                historialRepo.save(historial);
-            }
-
-            return ResponseEntity.ok(pqrs);
-
-        } catch (Exception e) {
-            Map<String, Object> response = new HashMap<>();
-            response.put("mensaje", "Error al actualizar PQRS");
-            response.put("error", e.getMessage());
-            return ResponseEntity.status(500).body(response);
+        if (pqrsOpt.isEmpty()) {
+            return ResponseEntity.status(404)
+                    .body("PQRS no encontrada");
         }
-    }
 
-    //////////////////////////////////////////////////////
-    // ELIMINAR PQRS
-    //////////////////////////////////////////////////////
-    @DeleteMapping("/{id}")
-    public ResponseEntity<?> eliminar(@PathVariable String id) {
-        try {
-            List<HistorialPQRS> historial = historialRepo.findByPqrsIdOrderByFechaAsc(id);
-            historialRepo.deleteAll(historial);
-            repo.deleteById(id);
-            return ResponseEntity.ok("PQRS eliminada");
-        } catch (Exception e) {
-            return ResponseEntity.status(500).body("Error al eliminar PQRS");
+        Pqrs pqrs = pqrsOpt.get();
+
+        // Verificar que la PQRS pertenezca al usuario autenticado
+        if (!esPropietario(pqrs.getUsuarioId())) {
+            return ResponseEntity.status(403)
+                    .body("No tienes permiso para editar esta PQRS");
         }
+
+        String estadoAnterior = pqrs.getEstado();
+
+        // El usuario puede editar estos datos
+        if (datos.getTipo() != null) {
+            pqrs.setTipo(datos.getTipo());
+        }
+
+        if (datos.getDescripcion() != null) {
+            pqrs.setDescripcion(datos.getDescripcion());
+        }
+
+        // El estado NO se modifica desde este endpoint.
+        // El cambio de estado se realiza mediante /{id}/estado,
+        // protegido para ADMIN.
+
+        repo.save(pqrs);
+
+        // Registrar la edición en el historial
+        HistorialPQRS historial = new HistorialPQRS();
+
+        historial.setPqrsId(pqrs.getId());
+        historial.setAccion("ACTUALIZACION");
+        historial.setEstadoAnterior(estadoAnterior);
+        historial.setEstadoNuevo(estadoAnterior);
+        historial.setFecha(new Date());
+        historial.setResponsable("Usuario");
+        historial.setComentarioInterno(
+                "El usuario actualizó su PQRS."
+        );
+        historial.setMensajeCliente(
+                "Tu PQRS fue actualizada correctamente."
+        );
+        historial.setVisibleCliente(true);
+        historial.setDetalle(
+                "Se actualizaron los datos de la PQRS"
+        );
+
+        historialRepo.save(historial);
+
+        return ResponseEntity.ok(pqrs);
+
+    } catch (Exception e) {
+
+        Map<String, Object> response = new HashMap<>();
+
+        response.put(
+                "mensaje",
+                "Error al actualizar PQRS"
+        );
+
+        response.put(
+                "error",
+                e.getMessage()
+        );
+
+        return ResponseEntity.status(500)
+                .body(response);
     }
+ }
+
+ //////////////////////////////////////////////////////
+ // ELIMINAR PQRS
+ //////////////////////////////////////////////////////
+   @DeleteMapping("/{id}")
+   public ResponseEntity<?> eliminar(@PathVariable String id) {
+    try {
+
+        Optional<Pqrs> pqrsOpt = repo.findById(id);
+
+        if (pqrsOpt.isEmpty()) {
+            return ResponseEntity.status(404)
+                    .body("PQRS no encontrada");
+        }
+
+        Pqrs pqrs = pqrsOpt.get();
+
+        // Verificar que la PQRS pertenezca al usuario autenticado
+        if (!esPropietario(pqrs.getUsuarioId())) {
+            return ResponseEntity.status(403)
+                    .body("No tienes permiso para eliminar esta PQRS");
+        }
+
+        // Eliminar historial asociado
+        List<HistorialPQRS> historial =
+                historialRepo.findByPqrsIdOrderByFechaAsc(id);
+
+        historialRepo.deleteAll(historial);
+
+        // Eliminar PQRS
+        repo.deleteById(id);
+
+        return ResponseEntity.ok("PQRS eliminada");
+
+    } catch (Exception e) {
+        return ResponseEntity.status(500)
+                .body("Error al eliminar PQRS");
+    }
+ }
 
     //////////////////////////////////////////////////////
     // DASHBOARD USER
     //////////////////////////////////////////////////////
-    @GetMapping("/estadisticas/{usuarioId}")
-    public ResponseEntity<Map<String, Object>> estadisticas(@PathVariable String usuarioId) {
-        List<Pqrs> lista = repo.findByUsuarioId(usuarioId);
-        long total = lista.size();
-        long pendientes = lista.stream().filter(p -> "PENDIENTE".equalsIgnoreCase(p.getEstado())).count();
-        long proceso = lista.stream().filter(p -> "PROCESO".equalsIgnoreCase(p.getEstado())).count();
-        long resueltas = lista.stream().filter(p -> "RESUELTO".equalsIgnoreCase(p.getEstado())).count();
-        Map<String, Object> stats = new HashMap<>();
-        stats.put("total", total);
-        stats.put("pendientes", pendientes);
-        stats.put("proceso", proceso);
-        stats.put("resueltas", resueltas);
-        return ResponseEntity.ok(stats);
+  @GetMapping("/estadisticas/{usuarioId}")
+  public ResponseEntity<?> estadisticas(@PathVariable String usuarioId) {
+
+    if (!esAdmin() && !esPropietario(usuarioId)) {
+        return ResponseEntity.status(403)
+                .body("No tienes permiso para consultar estas estadísticas");
     }
+
+    List<Pqrs> lista = repo.findByUsuarioId(usuarioId);
+
+    long total = lista.size();
+
+    long pendientes = lista.stream()
+            .filter(p -> "PENDIENTE".equalsIgnoreCase(p.getEstado()))
+            .count();
+
+    long proceso = lista.stream()
+            .filter(p -> "PROCESO".equalsIgnoreCase(p.getEstado()))
+            .count();
+
+    long resueltas = lista.stream()
+            .filter(p -> "RESUELTO".equalsIgnoreCase(p.getEstado()))
+            .count();
+
+    Map<String, Object> stats = new HashMap<>();
+
+    stats.put("total", total);
+    stats.put("pendientes", pendientes);
+    stats.put("proceso", proceso);
+    stats.put("resueltas", resueltas);
+
+    return ResponseEntity.ok(stats);
+  }
 
     //////////////////////////////////////////////////////
     // ADMIN PANEL
@@ -447,22 +578,59 @@ public class PqrsController {
     }
 
     //////////////////////////////////////////////////////
-    // HISTORIAL USER
-    //////////////////////////////////////////////////////
+   // HISTORIAL USER
+  //////////////////////////////////////////////////////
     @GetMapping("/{id}/historial")
-    public ResponseEntity<?> obtenerHistorialUsuario(@PathVariable String id) {
-        List<HistorialPQRS> historialVisible = historialRepo.findByPqrsIdAndVisibleClienteTrueOrderByFechaAsc(id);
-        return ResponseEntity.ok(historialVisible);
+   public ResponseEntity<?> obtenerHistorialUsuario(@PathVariable String id) {
+
+    Optional<Pqrs> pqrsOpt = repo.findById(id);
+
+    if (pqrsOpt.isEmpty()) {
+        return ResponseEntity.status(404)
+                .body("PQRS no encontrada");
     }
 
-    //////////////////////////////////////////////////////
-    // HISTORIAL ADMIN
-    //////////////////////////////////////////////////////
+    Pqrs pqrs = pqrsOpt.get();
+
+    // El USER solo puede consultar el historial
+    // de una PQRS que le pertenece
+    if (!esPropietario(pqrs.getUsuarioId())) {
+        return ResponseEntity.status(403)
+                .body("No tienes permiso para consultar el historial de esta PQRS");
+     }
+
+     List<HistorialPQRS> historialVisible =
+            historialRepo.findByPqrsIdAndVisibleClienteTrueOrderByFechaAsc(id);
+
+     return ResponseEntity.ok(historialVisible);
+   
+    }
+
+  //////////////////////////////////////////////////////
+  // HISTORIAL ADMIN
+  //////////////////////////////////////////////////////
     @GetMapping("/{id}/historial-admin")
     public ResponseEntity<?> obtenerHistorialAdmin(@PathVariable String id) {
-        List<HistorialPQRS> historial = historialRepo.findByPqrsIdOrderByFechaAsc(id);
-        return ResponseEntity.ok(historial);
+
+    // Verificar que la PQRS exista
+    Optional<Pqrs> pqrsOpt = repo.findById(id);
+
+    if (pqrsOpt.isEmpty()) {
+        return ResponseEntity.status(404)
+                .body("PQRS no encontrada");
     }
+
+    // Solo ADMIN puede consultar el historial administrativo
+    if (!esAdmin()) {
+        return ResponseEntity.status(403)
+                .body("No tienes permiso para consultar el historial administrativo");
+    }
+
+    List<HistorialPQRS> historial =
+            historialRepo.findByPqrsIdOrderByFechaAsc(id);
+
+    return ResponseEntity.ok(historial);
+  }
 
     //////////////////////////////////////////////////////
     // ESTADISTICAS GLOBALES
@@ -482,15 +650,30 @@ public class PqrsController {
         return ResponseEntity.ok(stats);
     }
 
-    //////////////////////////////////////////////////////
-    // DETALLE PQRS
-    //////////////////////////////////////////////////////
+   //////////////////////////////////////////////////////
+  // DETALLE PQRS
+  //////////////////////////////////////////////////////
     @GetMapping("/detalle/{id}")
-    public ResponseEntity<?> obtenerPorId(@PathVariable String id) {
-        Optional<Pqrs> pqrsOpt = repo.findById(id);
-        if (pqrsOpt.isEmpty()) return ResponseEntity.status(404).body("PQRS no encontrada");
-        return ResponseEntity.ok(pqrsOpt.get());
+   public ResponseEntity<?> obtenerPorId(@PathVariable String id) {
+
+    Optional<Pqrs> pqrsOpt = repo.findById(id);
+
+    if (pqrsOpt.isEmpty()) {
+        return ResponseEntity.status(404)
+                .body("PQRS no encontrada");
     }
+
+    Pqrs pqrs = pqrsOpt.get();
+
+    // ADMIN puede consultar cualquier PQRS
+    // USER solo puede consultar sus propias PQRS
+    if (!esAdmin() && !esPropietario(pqrs.getUsuarioId())) {
+        return ResponseEntity.status(403)
+                .body("No tienes permiso para consultar esta PQRS");
+    }
+
+    return ResponseEntity.ok(pqrs);
+   }
 
     //////////////////////////////////////////////////////
     // DESCARGAR ARCHIVO

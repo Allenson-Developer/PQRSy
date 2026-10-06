@@ -168,10 +168,6 @@ public class UsuarioController {
             // DEBUG LOGIN
             //////////////////////////////////////////////////
 
-            System.out.println("============== LOGIN ==============");
-            System.out.println("USERNAME: " + username);
-            System.out.println("DOCUMENTO: " + documento);
-
             Optional<Usuario> userOpt;
 
             //////////////////////////////////////////////////
@@ -186,12 +182,8 @@ public class UsuarioController {
                                 documento
                         );
 
-                System.out.println(
-                        "ADMIN FOUND: "
-                                + userOpt.isPresent()
-                );
 
-                if (userOpt.isEmpty()) {
+                  if (userOpt.isEmpty()) {
 
                     return ResponseEntity
                             .status(403)
@@ -207,10 +199,6 @@ public class UsuarioController {
                 userOpt =
                         repo.findByUsername(username);
 
-                System.out.println(
-                        "USER FOUND: "
-                                + userOpt.isPresent()
-                );
 
                 if (userOpt.isEmpty()) {
 
@@ -238,27 +226,14 @@ public class UsuarioController {
             //////////////////////////////////////////////////
             // DEBUG PASSWORD
             //////////////////////////////////////////////////
-
-            System.out.println(
-                    "PASSWORD ENVIADA: "
-                            + password
-            );
-
-            System.out.println(
-                    "HASH DB: "
-                            + user.getPassword()
-            );
-
+            /// 
             boolean passwordCorrecta =
                     passwordEncoder.matches(
                             password,
                             user.getPassword()
                     );
 
-            System.out.println(
-                    "PASSWORD MATCH: "
-                            + passwordCorrecta
-            );
+          
 
             //////////////////////////////////////////////////
             // VALIDAR PASSWORD
@@ -274,9 +249,6 @@ public class UsuarioController {
             //////////////////////////////////////////////////
             // LOGIN EXITOSO
             //////////////////////////////////////////////////
-
-            System.out.println("LOGIN EXITOSO");
-
 
          String token =
          jwtService.generarToken(user);

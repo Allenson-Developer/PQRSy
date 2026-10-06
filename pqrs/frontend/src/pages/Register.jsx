@@ -7,11 +7,12 @@ function Register() {
 
   //  SOLO USER (SE ELIMINA ADMIN)
   const [nombre, setNombre] = useState("");
+  const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
 
   const registrar = async () => {
-    if (!nombre || !username || !password) {
+    if (!nombre || !username || !email || !password) {
       alert("Completa todos los campos");
       return;
     }
@@ -20,6 +21,7 @@ function Register() {
       const body = {
         nombre,
         username,
+        email,
         password,
         role: "USER", //  SIEMPRE USER
       };
@@ -59,6 +61,13 @@ function Register() {
             placeholder="Usuario"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
+          />
+
+          <input
+          type="email"
+          placeholder="Correo electrónico"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
           />
 
           <input
