@@ -2,10 +2,14 @@ package com.pqrs.pqrs.controller;
 
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import org.springframework.mail.MailException;
+import com.pqrs.pqrs.service.EmailService;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -40,95 +44,111 @@ public class UsuarioController {
     @Autowired
     private JwtService jwtService;
 
+    @Autowired
+    private EmailService emailService;
+
     private final PasswordEncoder passwordEncoder =
             new BCryptPasswordEncoder();
 
     //////////////////////////////////////////////////////
-    // REGISTER
-    //////////////////////////////////////////////////////
+     // REGISTER
+  //////////////////////////////////////////////////////
 
-    @PostMapping("/register")
-    public ResponseEntity<?> crear(
-            @RequestBody Usuario user
-    ) {
+  @PostMapping("/register")
+  public ResponseEntity<?> crear(@RequestBody Usuario user) {
 
-        try {
+    try {
 
-            //////////////////////////////////////////////////
-            // VALIDACIONES
-            //////////////////////////////////////////////////
+        // VALIDAR NOMBRE
+        if (user.getNombre() == null ||
+                user.getNombre().isBlank()) {
 
-            if (user.getUsername() == null ||
-                    user.getUsername().trim().isEmpty()) {
-
-                return ResponseEntity
-                        .badRequest()
-                        .body("El username es obligatorio");
-            }
-
-            if (user.getPassword() == null ||
-                    user.getPassword().trim().isEmpty()) {
-
-                return ResponseEntity
-                        .badRequest()
-                        .body("La contraseña es obligatoria");
-            }
-
-            //////////////////////////////////////////////////
-            // ESTADO POR DEFECTO
-            //////////////////////////////////////////////////
-
-            if (user.getEstado() == null) {
-
-                user.setEstado("ACTIVO");
-            }
-
-            //////////////////////////////////////////////////
-            // ROL POR DEFECTO
-            //////////////////////////////////////////////////
-
-            if (user.getRole() == null) {
-
-                user.setRole("USER");
-            }
-
-            //////////////////////////////////////////////////
-            // ENCRIPTAR PASSWORD
-            //////////////////////////////////////////////////
-
-            user.setPassword(
-                    passwordEncoder.encode(
-                            user.getPassword()
-                    )
-            );
-
-            Usuario nuevo =
-                    repo.save(user);
-
-            return ResponseEntity.ok(
-                    nuevo
-            );
-
-        } catch (Exception e) {
-
-            Map<String, Object> response =
-                    new HashMap<>();
-
-            response.put(
-                    "mensaje",
-                    "Error al registrar usuario"
-            );
-
-            response.put(
-                    "error",
-                    e.getMessage()
-            );
-
-            return ResponseEntity
-                    .status(500)
-                    .body(response);
+            return ResponseEntity.badRequest()
+                    .body("El nombre es obligatorio");
         }
+
+        user.setNombre(user.getNombre().trim());
+
+        // VALIDAR USERNAME
+        if (user.getUsername() == null ||
+                user.getUsername().isBlank()) {
+
+            return ResponseEntity.badRequest()
+                    .body("El username es obligatorio");
+        }
+
+        String username = user.getUsername().trim();
+        user.setUsername(username);
+
+        if (repo.existsByUsername(username)) {
+            return ResponseEntity.status(409)
+                    .body("El username ya está registrado");
+        }
+
+        // VALIDAR CORREO
+        if (user.getEmail() == null ||
+                user.getEmail().isBlank()) {
+
+            return ResponseEntity.badRequest()
+                    .body("El correo electrónico es obligatorio");
+        }
+
+        String email = user.getEmail()
+                .trim()
+                .toLowerCase(Locale.ROOT);
+
+        if (!email.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")) {
+            return ResponseEntity.badRequest()
+                    .body("El formato del correo electrónico no es válido");
+        }
+
+        user.setEmail(email);
+
+        if (repo.existsByEmail(email)) {
+            return ResponseEntity.status(409)
+                    .body("El correo electrónico ya está registrado");
+        }
+
+        // VALIDAR CONTRASEÑA
+        if (user.getPassword() == null ||
+                user.getPassword().isBlank()) {
+
+            return ResponseEntity.badRequest()
+                    .body("La contraseña es obligatoria");
+        }
+
+        // SEGURIDAD: EL REGISTRO PÚBLICO SIEMPRE CREA USER
+        user.setRole("USER");
+        user.setEstado("ACTIVO");
+
+        // ENCRIPTAR CONTRASEÑA
+        user.setPassword(
+                passwordEncoder.encode(user.getPassword())
+        );
+
+        // GUARDAR USUARIO
+        Usuario nuevo = repo.save(user);
+
+        return ResponseEntity.ok(nuevo);
+
+    } catch (DuplicateKeyException e) {
+
+        return ResponseEntity.status(409)
+                .body("El username o correo electrónico ya está registrado");
+
+    } catch (Exception e) {
+
+        Map<String, Object> response = new HashMap<>();
+
+        response.put(
+                "mensaje",
+                "Error al registrar usuario"
+        );
+
+        // No exponer detalles internos del servidor al cliente.
+        return ResponseEntity.status(500).body(response);
     }
+ }
 
     //////////////////////////////////////////////////////
     // LOGIN
@@ -542,6 +562,28 @@ public class UsuarioController {
         return ResponseEntity
                 .status(500)
                 .body(response);
+    }
+ }
+
+  //////////////////////////////////////////////////////
+ // PRUEBA TEMPORAL DE CORREO
+ //////////////////////////////////////////////////////
+
+  @PostMapping("/send-email")
+ public ResponseEntity<?> enviarCorreoPrueba() {
+
+    try {
+
+        emailService.enviarCorreoPrueba();
+
+        return ResponseEntity.ok(
+                "Correo enviado. Revisa tu bandeja de entrada y spam."
+        );
+
+    } catch (MailException e) {
+
+        return ResponseEntity.status(502)
+                .body("No se pudo enviar el correo. Revisa la configuración SMTP.");
     }
  }
 

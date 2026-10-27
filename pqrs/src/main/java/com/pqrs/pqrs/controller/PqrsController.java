@@ -675,26 +675,162 @@ public class PqrsController {
     return ResponseEntity.ok(pqrs);
    }
 
-    //////////////////////////////////////////////////////
-    // DESCARGAR ARCHIVO
-    //////////////////////////////////////////////////////
-    @GetMapping("/archivo/{nombre}")
-    public ResponseEntity<?> descargarArchivo(@PathVariable String nombre) {
-        try {
-            Path ruta = Paths.get("uploads/").resolve(nombre).normalize();
-            File archivo = ruta.toFile();
-            if (!archivo.exists()) return ResponseEntity.status(404).body("Archivo no encontrado");
-            byte[] contenido = Files.readAllBytes(ruta);
-            return ResponseEntity.ok()
-                    .header("Content-Disposition", "inline; filename=\"" + archivo.getName() + "\"")
-                    .body(contenido);
-        } catch (Exception e) {
-            Map<String, Object> response = new HashMap<>();
-            response.put("mensaje", "Error al descargar archivo");
-            response.put("error", e.getMessage());
-            return ResponseEntity.status(500).body(response);
+   //////////////////////////////////////////////////////
+// VISUALIZAR ARCHIVO ADJUNTO
+//////////////////////////////////////////////////////
+
+@GetMapping("/archivo/{nombre}")
+public ResponseEntity<?> descargarArchivo(
+        @PathVariable String nombre) {
+
+    try {
+        Path carpetaUploads = Paths.get("uploads")
+                .toAbsolutePath()
+                .normalize();
+
+        Path ruta = carpetaUploads
+                .resolve(nombre)
+                .normalize();
+
+        // Evitar que la ruta salga de la carpeta uploads
+        if (!ruta.startsWith(carpetaUploads)) {
+            return ResponseEntity.badRequest()
+                    .body("Ruta de archivo no válida");
+        }
+
+        if (!Files.isRegularFile(ruta)) {
+            return ResponseEntity.notFound().build();
+        }
+
+        byte[] contenido = Files.readAllBytes(ruta);
+
+        // Detectar el formato real, aunque el archivo
+        // esté guardado con un nombre UUID sin extensión.
+        String tipoContenido =
+                detectarTipoContenido(ruta, contenido);
+
+        String nombreDescarga = ruta.getFileName().toString();
+        String extension = extensionPorMime(tipoContenido);
+
+        if (!nombreDescarga.contains(".")
+                && !extension.isEmpty()) {
+            nombreDescarga += extension;
+        }
+
+        return ResponseEntity.ok()
+                .contentType(
+                        org.springframework.http.MediaType
+                                .parseMediaType(tipoContenido))
+                .contentLength(contenido.length)
+                .header(
+                        org.springframework.http.HttpHeaders.CONTENT_DISPOSITION,
+                        org.springframework.http.ContentDisposition
+                                .inline()
+                                .filename(
+                                        nombreDescarga,
+                                        java.nio.charset.StandardCharsets.UTF_8)
+                                .build()
+                                .toString())
+                .body(contenido);
+
+    } catch (Exception e) {
+        e.printStackTrace();
+
+        return ResponseEntity.internalServerError()
+                .body("No se pudo visualizar el archivo");
+    }
+}
+
+private String detectarTipoContenido(
+        Path ruta,
+        byte[] contenido) throws java.io.IOException {
+
+    // PDF: %PDF-
+    if (contenido.length >= 5
+            && contenido[0] == '%'
+            && contenido[1] == 'P'
+            && contenido[2] == 'D'
+            && contenido[3] == 'F'
+            && contenido[4] == '-') {
+        return "application/pdf";
+    }
+
+    // PNG
+    if (contenido.length >= 8
+            && (contenido[0] & 0xFF) == 0x89
+            && contenido[1] == 0x50
+            && contenido[2] == 0x4E
+            && contenido[3] == 0x47
+            && contenido[4] == 0x0D
+            && contenido[5] == 0x0A
+            && contenido[6] == 0x1A
+            && contenido[7] == 0x0A) {
+        return "image/png";
+    }
+
+    // JPEG
+    if (contenido.length >= 3
+            && (contenido[0] & 0xFF) == 0xFF
+            && (contenido[1] & 0xFF) == 0xD8
+            && (contenido[2] & 0xFF) == 0xFF) {
+        return "image/jpeg";
+    }
+
+    // GIF
+    if (contenido.length >= 6) {
+        String firma = new String(
+                contenido, 0, 6,
+                java.nio.charset.StandardCharsets.US_ASCII);
+
+        if (firma.equals("GIF87a")
+                || firma.equals("GIF89a")) {
+            return "image/gif";
         }
     }
+
+    // WEBP
+    if (contenido.length >= 12
+            && new String(contenido, 0, 4,
+                    java.nio.charset.StandardCharsets.US_ASCII)
+                    .equals("RIFF")
+            && new String(contenido, 8, 4,
+                    java.nio.charset.StandardCharsets.US_ASCII)
+                    .equals("WEBP")) {
+        return "image/webp";
+    }
+
+    // Otros formatos que Java pueda reconocer
+    String tipo = java.nio.file.Files.probeContentType(ruta);
+
+    return tipo != null
+            ? tipo
+            : "application/octet-stream";
+}
+
+
+private String extensionPorMime(String tipo) {
+
+    switch (tipo) {
+        case "application/pdf":
+            return ".pdf";
+
+        case "image/png":
+            return ".png";
+
+        case "image/jpeg":
+            return ".jpg";
+
+        case "image/gif":
+            return ".gif";
+
+        case "image/webp":
+            return ".webp";
+
+        default:
+            return "";
+    }
+}
+
 
     @GetMapping("/dashboard")
     public ResponseEntity<?> dashboard() {

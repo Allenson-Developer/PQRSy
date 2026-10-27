@@ -157,6 +157,11 @@ public class SecurityConfig {
                         .requestMatchers("/pqrs/**")
                         .authenticated()
 
+                        .requestMatchers(
+                         HttpMethod.POST,
+                         "/test/send-email"
+                        ).hasRole("ADMIN")
+
                         .anyRequest()
                         .denyAll()
                 );

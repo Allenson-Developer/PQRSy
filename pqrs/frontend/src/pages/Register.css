@@ -1,105 +1,48 @@
-.register-page {
-  height: 100vh;
-  background: rgba(0, 0, 0, 0.85);
-  backdrop-filter: blur(6px);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
-
-.register-box {
-  width: 400px;
-  padding: 40px;
-  border-radius: 15px;
-  background: rgba(20, 20, 20, 0.95);
-  color: white;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8);
-}
-
-/* TITULO */
-.register-box h2 {
-  margin-bottom: 20px;
-}
-
-/* SUBTEXTO */
-.subtitle {
-  color: #bbb;
-  margin-bottom: 20px;
-}
-
-/* BOTONES */
-.roles {
-  display: flex;
-  gap: 10px;
-}
-
-.roles button {
-  flex: 1;
-  padding: 12px;
-  border-radius: 8px;
-  border: none;
-  cursor: pointer;
-  font-weight: bold;
-  background: #2a2a2a;
-  color: white;
-}
-
-.roles .admin {
-  background: #f4c430;
-  color: black;
-}
-
-/* FORM */
-.form {
-  margin-top: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-/* INPUTS */
-.form input {
-  padding: 12px;
-  border-radius: 8px;
-  border: none;
-  background: #2a2a2a;
-  color: white;
-  outline: none;
-}
-
-/* BOTON */
-.form button {
-  margin-top: 10px;
-  padding: 14px;
-  border-radius: 30px;
-  border: none;
-  background: linear-gradient(90deg, #f4c430, #ffdd55);
-  color: black;
-  font-weight: bold;
-  cursor: pointer;
-  transition: 0.3s;
-}
-
-.form button:hover {
-  transform: scale(1.05);
-  box-shadow: 0 0 15px #f4c430;
-}
-
-/* VOLVER */
-.back {
-  margin-top: 10px;
-  font-size: 14px;
-  cursor: pointer;
-  color: #ccc;
-}
-
-/* LINK */
-.login-link {
-  margin-top: 20px;
-  text-align: center;
-}
-
-.login-link span {
-  cursor: pointer;
-  font-weight: bold;
-}
+.register-page { min-height: 100vh; color: #142d4a; background: #f2f5f9; }
+.register-topbar { display: flex; align-items: center; justify-content: space-between; gap: 15px; min-height: 82px; padding: 10px clamp(19px,5vw,75px); background: #fff; border-bottom: 1px solid #e0e7ef; }
+.register-brand { display: inline-flex; align-items: center; gap: 10px; padding: 0; color: #142d4a; background: transparent; border: 0; text-align: left; cursor: pointer; }
+.register-brand img { width: 44px; height: 52px; object-fit: contain; }
+.register-brand span { display: flex; flex-direction: column; line-height: 1; }
+.register-brand strong { font-size: 19px; font-weight: 950; letter-spacing: -.6px; }
+.register-brand strong span { color: #c7b200; }
+.register-brand small { margin-top: 5px; font-size: 8px; font-weight: 850; letter-spacing: 3.4px; }
+.register-back-link { display: inline-flex; align-items: center; gap: 7px; padding: 10px 13px; color: #405671; background: transparent; border: 1px solid transparent; border-radius: 10px; font-size: 11px; font-weight: 850; cursor: pointer; }
+.register-back-link:hover { background: #f2f5f9; border-color: #e0e7ef; }
+.register-layout { display: grid; grid-template-columns: minmax(250px,.9fr) minmax(400px,.88fr); align-items: stretch; width: min(1240px,calc(100% - 48px)); margin: 34px auto; overflow: hidden; background: #fff; border: 1px solid #e0e7ef; border-radius: 24px; box-shadow: 0 18px 48px rgba(20,45,74,.09); }
+.register-intro-panel { position: relative; isolation: isolate; display: flex; flex-direction: column; min-height: 590px; overflow: hidden; padding: clamp(30px,4.5vw,55px); color: white; background: linear-gradient(145deg,rgba(10,31,54,.98),rgba(20,45,74,.89)),url("https://images.unsplash.com/photo-1534943441045-1009d7cb0bb9?auto=format&fit=crop&w=1100&q=85") center/cover,#142d4a; }
+.register-intro-panel::after { position: absolute; z-index: -1; right: -165px; bottom: -170px; width: 360px; height: 360px; content: ""; border: 40px solid #fff000; border-radius: 50%; }
+.register-intro-kicker { color: #fff000; font-size: 10px; font-weight: 950; letter-spacing: 1.8px; }
+.register-intro-panel h1 { margin: 22px 0 18px; color: #fff; font-size: clamp(34px,4vw,51px); line-height: 1.06; letter-spacing: -1.9px; font-weight: 950; }
+.register-intro-panel h1 em { color: #fff000; font-style: normal; }
+.register-intro-panel > p { max-width: 420px; color: rgba(255,255,255,.79); font-size: 13px; line-height: 1.8; }
+.register-intro-items { display: grid; gap: 13px; margin-top: 28px; }
+.register-intro-items span { display: flex; align-items: center; gap: 10px; color: rgba(255,255,255,.9); font-size: 12px; font-weight: 700; }
+.register-intro-items svg { color: #fff000; }
+.register-intro-seal { display: flex; align-items: center; gap: 9px; margin-top: auto; padding-top: 30px; }
+.register-intro-seal img { width: 42px; height: 46px; object-fit: contain; }
+.register-intro-seal div { display: flex; flex-direction: column; gap: 5px; }
+.register-intro-seal strong { font-size: 13px; font-weight: 950; letter-spacing: .7px; }
+.register-intro-seal small { color: #fff000; font-size: 8px; font-weight: 850; letter-spacing: 3px; }
+.register-box { padding: clamp(30px,4vw,48px); }
+.register-eyebrow { color: #948000; font-size: 10px; font-weight: 950; letter-spacing: 1.7px; }
+.register-box h2 { margin: 10px 0 8px; color: #142d4a; font-size: 33px; line-height: 1.08; font-weight: 950; letter-spacing: -1px; }
+.subtitle { color: #718097; font-size: 12px; line-height: 1.65; }
+.register-form { display: grid; gap: 15px; margin-top: 24px; }
+.register-field { display: grid; gap: 7px; color: #2b425d; font-size: 11px; font-weight: 850; }
+.register-field input { width: 100%; min-height: 44px; padding: 11px 13px; color: #142d4a; background: #fbfcfe; border: 1px solid #dce4ed; border-radius: 10px; outline: 0; font-size: 12px; font-weight: 500; }
+.register-field input::placeholder { color: #a0aab8; }
+.register-field input:focus { background: #fff; border-color: #d2bc00; box-shadow: 0 0 0 3px rgba(255,240,0,.2); }
+.register-field small { color: #8a96a7; font-size: 10px; font-weight: 500; }
+.register-submit { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 48px; margin-top: 6px; padding: 13px 16px; color: #142d4a; background: #fff000; border: 1px solid #fff000; border-radius: 11px; font-size: 12px; font-weight: 950; cursor: pointer; transition: transform .18s ease, box-shadow .18s ease, background .18s ease; }
+.register-submit:hover:not(:disabled) { transform: translateY(-2px); background: #ffe500; box-shadow: 0 8px 20px rgba(202,184,0,.2); }
+.register-submit:disabled { cursor: not-allowed; opacity: .55; }
+.login-link { margin-top: 21px; color: #76849a; font-size: 11px; text-align: center; }
+.login-link button { padding: 0; color: #142d4a; background: transparent; border: 0; font-size: inherit; font-weight: 950; text-decoration: underline; text-decoration-color: #d5c400; text-underline-offset: 3px; cursor: pointer; }
+.register-note { display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 16px; color: #8995a5; font-size: 9px; line-height: 1.5; }
+.register-note svg { color: #a28f00; }
+.register-footer { display: flex; align-items: center; justify-content: space-between; gap: 15px; padding: 17px clamp(20px,5vw,75px); color: #8793a4; background: #fff; border-top: 1px solid #e0e7ef; font-size: 10px; }
+.register-footer span { color: #142d4a; font-size: 10px; font-weight: 950; letter-spacing: 1.7px; }
+.register-footer b { margin-left: 4px; color: #c4af00; font-size: 9px; letter-spacing: 2px; }
+@media (max-width: 850px) { .register-layout { grid-template-columns: minmax(0,1fr); width: min(620px,calc(100% - 28px)); margin: 17px auto; } .register-intro-panel { min-height: 260px; padding: 26px; } .register-intro-panel h1 { margin: 14px 0 10px; font-size: 35px; } .register-intro-panel > p { max-width: 520px; font-size: 12px; } .register-intro-items { grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; margin-top: 20px; } .register-intro-items span { align-items: flex-start; gap: 7px; font-size: 10px; } .register-intro-seal { display: none; } .register-intro-panel::after { right: -180px; bottom: -190px; } .register-box { padding: 27px; } }
+@media (max-width: 520px) { .register-topbar { min-height: 70px; padding: 8px 14px; } .register-brand img { width: 35px; height: 42px; } .register-brand strong { font-size: 15px; } .register-brand small { font-size: 7px; letter-spacing: 2.7px; } .register-back-link { padding: 8px; font-size: 10px; } .register-layout { width: calc(100% - 20px); border-radius: 18px; } .register-intro-panel { min-height: 235px; padding: 21px; } .register-intro-panel h1 { font-size: 30px; } .register-intro-panel > p { font-size: 11px; } .register-intro-items { grid-template-columns: minmax(0,1fr); gap: 8px; margin-top: 15px; } .register-intro-items span { align-items: center; } .register-box { padding: 23px 19px; } .register-box h2 { font-size: 29px; } .register-footer { align-items: flex-start; flex-direction: column; gap: 7px; padding: 16px; } }
+@media (prefers-reduced-motion: reduce) { .register-submit { transition: none !important; } }

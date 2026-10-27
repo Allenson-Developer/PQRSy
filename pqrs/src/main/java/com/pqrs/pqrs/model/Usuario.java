@@ -4,7 +4,11 @@ import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
+
+import java.util.Date;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 @Document(collection = "usuarios")
 public class Usuario {
@@ -39,6 +43,16 @@ public class Usuario {
 
     @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     private String password;
+
+    //////////////////////////////////////////////////////
+// RECUPERACIÓN DE CONTRASEÑA
+   //////////////////////////////////////////////////////
+
+    @JsonIgnore
+    private String passwordResetTokenHash;
+
+    @JsonIgnore
+    private Date passwordResetTokenExpiration;
 
     //////////////////////////////////////////////////////
     // ROL
@@ -157,6 +171,22 @@ public class Usuario {
      this.email = email;
 
     } 
+
+    public String getPasswordResetTokenHash() {
+       return passwordResetTokenHash;
+    }
+
+    public void setPasswordResetTokenHash(String passwordResetTokenHash) {
+      this.passwordResetTokenHash = passwordResetTokenHash;
+    }
+
+    public Date getPasswordResetTokenExpiration() {
+      return passwordResetTokenExpiration;
+    }
+
+    public void setPasswordResetTokenExpiration(Date passwordResetTokenExpiration) {
+     this.passwordResetTokenExpiration = passwordResetTokenExpiration;
+    }
 
     //////////////////////////////////////////////////////
     // NOMBRE COMPLETO

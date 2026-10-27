@@ -13,17 +13,22 @@ public interface UsuarioRepository
         extends MongoRepository<Usuario, String> {
 
    //////////////////////////////////////////////////////
-// LOGIN POR USERNAME
-//////////////////////////////////////////////////////
+ // LOGIN POR USERNAME
+  //////////////////////////////////////////////////////
 
-Optional<Usuario> findByUsername(
+ Optional<Usuario> findByPasswordResetTokenHash(
+        String passwordResetTokenHash
+
+ );
+
+ Optional<Usuario> findByUsername(
         String username
-);
+ );
 
-Optional<Usuario> findByUsernameAndEstado(
+ Optional<Usuario> findByUsernameAndEstado(
         String username,
-        String estado
-);
+        String estado 
+ );
 
     //////////////////////////////////////////////////////
     // LOGIN ADMIN CON DOCUMENTO
@@ -66,6 +71,11 @@ Optional<Usuario> findByUsernameAndEstado(
 
     boolean existsByUsername(
             String username
+    );
+
+    boolean existsByEmail(
+            String email
+
     );
 
     boolean existsByDocumento(

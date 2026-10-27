@@ -1,0 +1,48 @@
+.hv-dialog-backdrop {
+  position: fixed;
+  z-index: 5000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 22px;
+  background: rgba(9, 24, 42, 0.58);
+  -webkit-backdrop-filter: blur(7px);
+  backdrop-filter: blur(7px);
+  animation: hv-dialog-fade 160ms ease-out both;
+}
+.hv-dialog {
+  width: min(100%, 470px);
+  padding: 25px;
+  color: #14283d;
+  background: #fff;
+  border: 1px solid rgba(20, 40, 61, .12);
+  border-radius: 22px;
+  box-shadow: 0 28px 90px rgba(9, 24, 42, .28);
+  animation: hv-dialog-rise 220ms cubic-bezier(.2,.8,.2,1) both;
+}
+.hv-dialog-topline { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 16px; }
+.hv-dialog-icon { display: grid; place-items: center; width: 54px; height: 54px; border-radius: 16px; background: #fff6b9; color: #14283d; }
+.hv-dialog-success .hv-dialog-icon { background: #e1f6ec; color: #137448; }
+.hv-dialog-error .hv-dialog-icon, .hv-dialog-danger .hv-dialog-icon { background: #fff0ef; color: #bd2929; }
+.hv-dialog-close { display: grid; place-items: center; width: 35px; height: 35px; color: #64748b; background: #f3f6fa; border: 1px solid #e4eaf1; border-radius: 11px; cursor: pointer; transition: .18s ease; }
+.hv-dialog-close:hover { color: #14283d; background: #e9eef5; transform: rotate(4deg); }
+.hv-dialog h2 { margin: 0 0 9px; color: #14283d; font-size: 24px; line-height: 1.2; letter-spacing: -.5px; font-weight: 800; }
+.hv-dialog-message { color: #5c6b7e; font-size: 15px; line-height: 1.65; white-space: pre-line; overflow-wrap: anywhere; }
+.hv-dialog-detail { margin-top: 16px; padding: 13px 15px; background: #f4f7fb; border: 1px solid #e3e9f1; border-radius: 12px; color: #31455e; font-size: 13px; line-height: 1.5; }
+.hv-dialog-field { display: grid; gap: 8px; margin-top: 18px; color: #22374f; font-size: 13px; font-weight: 800; }
+.hv-dialog-field input, .hv-dialog-field textarea { width: 100%; box-sizing: border-box; padding: 12px 14px; color: #14283d; background: #fbfcfe; border: 1px solid #d7e0ea; border-radius: 12px; outline: 0; font: inherit; font-weight: 500; line-height: 1.5; resize: vertical; }
+.hv-dialog-field input:focus, .hv-dialog-field textarea:focus { border-color: #d5bd00; box-shadow: 0 0 0 3px rgba(255, 242, 0, .2); }
+.hv-dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
+.hv-dialog-button { min-height: 44px; padding: 11px 17px; border: 1px solid transparent; border-radius: 11px; font-size: 14px; font-weight: 800; cursor: pointer; transition: transform .16s ease, box-shadow .16s ease, background .16s ease; }
+.hv-dialog-button:hover { transform: translateY(-2px); }
+.hv-dialog-secondary { color: #20344c; background: #f3f6fa; border-color: #dce4ed; }
+.hv-dialog-secondary:hover { background: #e9eef5; }
+.hv-dialog-primary { color: #14283d; background: #fff000; box-shadow: 0 6px 16px rgba(222, 202, 0, .2); }
+.hv-dialog-primary:hover { background: #ffe100; box-shadow: 0 8px 22px rgba(222, 202, 0, .3); }
+.hv-dialog-primary.is-danger { color: #fff; background: #c63636; box-shadow: 0 6px 16px rgba(198, 54, 54, .18); }
+.hv-dialog-brand { margin-top: 22px; padding-top: 13px; border-top: 1px solid #edf0f4; color: #14283d; font-size: 10px; font-weight: 950; letter-spacing: 1.8px; }
+.hv-dialog-brand span { margin-left: 5px; font-size: 9px; font-weight: 650; letter-spacing: 2.8px; color: #8290a1; }
+@keyframes hv-dialog-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes hv-dialog-rise { from { opacity: 0; transform: translateY(10px) scale(.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@media (max-width: 520px) { .hv-dialog { padding: 21px; border-radius: 19px; } .hv-dialog h2 { font-size: 21px; } .hv-dialog-actions { flex-direction: column-reverse; } .hv-dialog-button { width: 100%; } }
+@media (prefers-reduced-motion: reduce) { .hv-dialog, .hv-dialog-backdrop, .hv-dialog * { animation: none !important; transition: none !important; } }
