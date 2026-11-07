@@ -6,7 +6,7 @@ import DetallePQRS from "./DetallePQRS";
 import "../styles/portal.css";
 import "./UserDashboard.css";
 
-const API_URL = "http://localhost:8080";
+const API_URL = "https://hoodvoice-api.onrender.com";
 
 const TIPOS_PQRS = [
   { value: "PETICION", title: "Petición", icon: "fileText", description: "Solicita información, documentos o actuaciones de interés general o particular." },

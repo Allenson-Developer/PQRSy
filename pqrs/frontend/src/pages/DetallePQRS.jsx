@@ -1,11 +1,10 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useFeedback } from "../components/FeedbackProvider";
-import AppIcon from "../components/AppIcon";
 import "../styles/portal.css";
 import "./UserDashboard.css";
 
-const API_URL = "http://localhost:8080";
+const API_URL = "https://hoodvoice-api.onrender.com";
 
 function obtenerMensajeError(response, detalle) {
   return detalle || `HTTP ${response.status} ${response.statusText}`;

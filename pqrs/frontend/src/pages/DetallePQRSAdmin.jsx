@@ -5,7 +5,7 @@ import AppIcon from "../components/AppIcon";
 import "../styles/portal.css";
 import "./DetallePQRSAdmin.css";
 
-const API_URL = "http://localhost:8080";
+const API_URL = "https://hoodvoice-api.onrender.com";
 
 function leerUsuarioGuardado() {
   try {

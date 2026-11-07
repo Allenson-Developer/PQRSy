@@ -26,7 +26,7 @@ function Register() {
     setEnviando(true);
     try {
       const body = { nombre: nombre.trim(), username: username.trim(), email: email.trim(), password, role: "USER" };
-      const response = await fetch("http://localhost:8080/test/register", {
+      const response = await fetch("https://hoodvoice-api.onrender.com/test/register", {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
       });
       if (response.ok) {

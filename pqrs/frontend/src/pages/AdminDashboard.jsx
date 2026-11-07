@@ -86,8 +86,8 @@ function AdminPQRS() {
       }
 
       const url = !filtro
-        ? "http://localhost:8080/pqrs/todas"
-        : `http://localhost:8080/pqrs/estado?estado=${encodeURIComponent(filtro)}`;
+        ? "https://hoodvoice-api.onrender.com/pqrs/todas"
+        : `https://hoodvoice-api.onrender.com/pqrs/estado?estado=${encodeURIComponent(filtro)}`;
 
       const response = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` },
@@ -383,7 +383,7 @@ function AdminStats() {
       setLoading(false);
       return () => { activo = false; };
     }
-    fetch("http://localhost:8080/pqrs/estadisticas-global", {
+    fetch("https://hoodvoice-api.onrender.com/pqrs/estadisticas-global", {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then(async (res) => {
