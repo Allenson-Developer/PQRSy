@@ -13,6 +13,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -48,6 +49,9 @@ public class PqrsController {
 
     @Autowired
     private HistorialPQRSRepository historialRepo;
+
+    @Value("${app.upload-dir:uploads}")
+    private String uploadDir;
 
   //////////////////////////////////////////////////////
   // SEGURIDAD - USUARIO AUTENTICADO
@@ -116,13 +120,11 @@ public class PqrsController {
             }
 
             if (archivo != null && !archivo.isEmpty()) {
-                String carpeta = "uploads/";
-                File directorio = new File(carpeta);
-                if (!directorio.exists()) {
-                    directorio.mkdirs();
-                }
+                Path directorio = Paths.get(uploadDir).toAbsolutePath().normalize();
+                Files.createDirectories(directorio);
+
                 String nombreArchivo = System.currentTimeMillis() + "_" + archivo.getOriginalFilename();
-                Path ruta = Paths.get(carpeta + nombreArchivo);
+                Path ruta = directorio.resolve(nombreArchivo).normalize();
                 Files.write(ruta, archivo.getBytes());
                 pqrs.setArchivo(nombreArchivo);
             }
@@ -684,7 +686,7 @@ public ResponseEntity<?> descargarArchivo(
         @PathVariable String nombre) {
 
     try {
-        Path carpetaUploads = Paths.get("uploads")
+        Path carpetaUploads = Paths.get(uploadDir)
                 .toAbsolutePath()
                 .normalize();
 

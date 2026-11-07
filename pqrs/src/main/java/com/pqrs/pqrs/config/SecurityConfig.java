@@ -92,6 +92,24 @@ public class SecurityConfig {
                         ).hasRole("ADMIN")
 
                         // ==============================
+                        // HISTORIAL POR ROL
+                        // ==============================
+
+                        // El ciudadano solo puede consultar los movimientos
+                        // marcados como visibles para el cliente.
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/historial/cliente/pqrs/*"
+                        ).hasRole("USER")
+
+                        // El administrador puede consultar el historial completo,
+                        // incluidas las notas internas.
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/historial/admin/pqrs/*"
+                        ).hasRole("ADMIN")
+
+                        // ==============================
                         // RUTAS USER
                         // ==============================
 
