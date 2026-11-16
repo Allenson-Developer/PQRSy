@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import AppIcon from "../components/AppIcon";
 import { useFeedback } from "../components/FeedbackProvider";
@@ -74,7 +75,20 @@ function obtenerCodigoVisible(item) {
 }
 
 function UserDashboard() {
-  const [vista, setVista] = useState("inicio");
+  const navigate = useNavigate();
+  const location = useLocation();
+  const vista = location.state?.userDashboardView || "inicio";
+  const cambiarVista = (siguienteVista, replace = false) => {
+    if (siguienteVista === vista) return;
+
+    navigate(location.pathname, {
+      replace,
+      state: {
+        ...(location.state && typeof location.state === "object" ? location.state : {}),
+        userDashboardView: siguienteVista,
+      },
+    });
+  };
   const [pqrsSeleccionada, setPqrsSeleccionada] = useState(null);
   const [usuario, setUsuario] = useState(leerUsuarioGuardado);
   const { confirmAction } = useFeedback();
@@ -103,12 +117,12 @@ function UserDashboard() {
 
   return (
     <div className="portal-shell user-portal">
-      <Navbar role="USER" user={usuario} activeView={vista} onNavigate={setVista} onLogout={logout} onUserUpdated={actualizarUsuarioLocal} />
+      <Navbar role="USER" user={usuario} activeView={vista} onNavigate={cambiarVista} onLogout={logout} onUserUpdated={actualizarUsuarioLocal} />
       <main className="portal-main user-main">
-        {vista === "inicio" && <InicioUsuario usuario={usuario} onNavigate={setVista} />}
-        {vista === "crear" && <CrearPQRS usuario={usuario} onCreated={() => setVista("ver")} />}
-        {vista === "ver" && <VerPQRS usuario={usuario} onNavigate={setVista} onOpenTracking={(item) => { setPqrsSeleccionada(item); setVista("detalle"); }} />}
-        {vista === "detalle" && <DetallePQRS pqrs={pqrsSeleccionada} volver={() => setVista("ver")} />}
+        {vista === "inicio" && <InicioUsuario usuario={usuario} onNavigate={cambiarVista} />}
+        {vista === "crear" && <CrearPQRS usuario={usuario} onCreated={() => cambiarVista("ver", true)} />}
+        {vista === "ver" && <VerPQRS usuario={usuario} onNavigate={cambiarVista} onOpenTracking={(item) => { setPqrsSeleccionada(item); cambiarVista("detalle"); }} />}
+        {vista === "detalle" && <DetallePQRS pqrs={pqrsSeleccionada} volver={() => navigate(-1)} />}
         {vista === "stats" && <Stats usuario={usuario} />}
         {vista === "perfil" && <Perfil usuario={usuario} onUserUpdated={actualizarUsuarioLocal} />}
       </main>

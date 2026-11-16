@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { useFeedback } from "../components/FeedbackProvider";
 import AppIcon from "../components/AppIcon";
+import { useFeedback } from "../components/FeedbackProvider";
 import "../styles/portal.css";
 import "./DetallePQRSAdmin.css";
 
@@ -65,6 +65,7 @@ function traducirAccion(accion) {
     CIERRE: "Caso cerrado",
     REAPERTURA: "Caso reabierto",
     NOTA_INTERNA: "Nota interna",
+    GESTION_COMPLETA: "Gestión administrativa",
   };
 
   return acciones[accion] || accion || "Movimiento registrado";
@@ -79,6 +80,7 @@ function obtenerIconoAccion(accion) {
     CIERRE: "checkCircle",
     REAPERTURA: "refresh",
     NOTA_INTERNA: "shield",
+    GESTION_COMPLETA: "refresh",
   };
 
   return iconos[accion] || "clock";
@@ -131,7 +133,6 @@ function DetallePQRSAdmin() {
   const [agente, setAgente] = useState("");
   const [seccionAbierta, setSeccionAbierta] = useState("");
   const [mensajeCiudadano, setMensajeCiudadano] = useState("");
-  const [enviandoMensaje, setEnviandoMensaje] = useState(false);
 
   useEffect(() => {
     const usuario = leerUsuarioGuardado();
@@ -144,6 +145,54 @@ function DetallePQRSAdmin() {
 
   const alternarSeccion = (seccion) => {
     setSeccionAbierta((actual) => actual === seccion ? "" : seccion);
+  };
+
+  // Solicita el adjunto con el JWT de la sesión administrativa,
+  // igual que la vista USER, y abre la respuesta como Blob.
+  const abrirArchivo = async (nombreArchivo) => {
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+      notify("Tu sesión ha expirado. Inicia sesión nuevamente.", {
+        title: "Sesión no disponible",
+        tone: "error",
+      });
+      window.location.href = "/";
+      return;
+    }
+
+    // Abrir la pestaña durante el clic evita que el navegador bloquee la ventana.
+    const ventana = window.open("about:blank", "_blank");
+    if (!ventana) {
+      notify("Permite las ventanas emergentes para abrir el archivo adjunto.", {
+        title: "No se pudo abrir el documento",
+        tone: "warning",
+      });
+      return;
+    }
+
+    try {
+      const respuesta = await fetch(
+        `${API_URL}/pqrs/archivo/${encodeURIComponent(nombreArchivo)}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      if (!respuesta.ok) {
+        throw new Error(await leerDetalleError(respuesta));
+      }
+
+      const blob = await respuesta.blob();
+      const urlTemporal = URL.createObjectURL(blob);
+      ventana.location.href = urlTemporal;
+      window.setTimeout(() => URL.revokeObjectURL(urlTemporal), 60000);
+    } catch (error) {
+      ventana.close();
+      console.error("Error abriendo el archivo adjunto:", error);
+      notify(`No se pudo abrir el archivo adjunto. ${error.message || ""}`, {
+        title: "Error al abrir el documento",
+        tone: "error",
+      });
+    }
   };
 
   const cargarDetalle = useCallback(async () => {
@@ -218,14 +267,22 @@ function DetallePQRSAdmin() {
 
     const agenteOriginal = (pqrs.agenteAsignado || "").trim();
     const agenteNuevo = agente.trim();
-    const estadoOriginal = pqrs.estado || "";
+    const estadoOriginal = String(pqrs.estado || "").trim().toUpperCase();
+    const estadoSeleccionado = String(nuevoEstado || "").trim().toUpperCase();
+    const mensaje = mensajeCiudadano.trim();
+    const nota = notaInterna.trim();
 
-    if (
-      !notaInterna.trim() &&
-      agenteNuevo === agenteOriginal &&
-      nuevoEstado === estadoOriginal
-    ) {
-      notify("No hay cambios para guardar. Modifica el agente, el estado o agrega una nota interna.", { title: "No hay cambios", tone: "warning" });
+    const hayCambios =
+      nota.length > 0 ||
+      mensaje.length > 0 ||
+      agenteNuevo !== agenteOriginal ||
+      estadoSeleccionado !== estadoOriginal;
+
+    if (!hayCambios) {
+      notify("No hay cambios para guardar. Modifica el agente, el estado o agrega una comunicación o nota interna.", {
+        title: "No hay cambios",
+        tone: "warning",
+      });
       return;
     }
 
@@ -239,7 +296,6 @@ function DetallePQRSAdmin() {
     setGuardando(true);
 
     try {
-      // Se conserva el endpoint actual de gestión.
       const response = await fetch(`${API_URL}/pqrs/${id}/gestion-completa`, {
         method: "PUT",
         headers: {
@@ -248,9 +304,9 @@ function DetallePQRSAdmin() {
         },
         body: JSON.stringify({
           agente: agenteNuevo,
-          estado: nuevoEstado,
-          comentario: notaInterna.trim(),
-          responsable: leerUsuarioGuardado()?.username || "ADMIN",
+          estado: estadoSeleccionado,
+          comentario: nota,
+          mensajeCliente: mensaje,
         }),
       });
 
@@ -261,80 +317,13 @@ function DetallePQRSAdmin() {
 
       notify("La gestión se registró correctamente.", { title: "Gestión guardada", tone: "success" });
       setNotaInterna("");
+      setMensajeCiudadano("");
       await cargarDetalle();
     } catch (error) {
       console.error("Error guardando la gestión:", error);
       notify(error.message || "Error guardando la gestión.", { title: "No se pudo guardar la gestión", tone: "error" });
     } finally {
       setGuardando(false);
-    }
-  };
-
-  const enviarMensajeCiudadano = async () => {
-    if (!pqrs) return;
-
-    const mensaje = mensajeCiudadano.trim();
-    if (!mensaje) {
-      notify("Escribe un mensaje antes de enviarlo.", { title: "Mensaje requerido", tone: "warning" });
-      return;
-    }
-
-    const estadoActual = String(pqrs.estado || "").trim().toUpperCase();
-    const estadoSeleccionado = String(nuevoEstado || "").trim().toUpperCase();
-    const cambioEstadoPendiente = estadoSeleccionado !== estadoActual;
-    const esRespuestaFinal = Boolean(pqrs.respuestaAdmin) && estadoActual === "RESUELTO" && !pqrs.respuestaFinalEnviada;
-    const puedeEnviar = !pqrs.respuestaAdmin || esRespuestaFinal;
-
-    if (cambioEstadoPendiente) {
-      notify("Guarda primero el cambio de estado. Después podrás enviar la comunicación correspondiente a esa etapa.", {
-        title: "Guarda la gestión primero",
-        tone: "warning",
-      });
-      return;
-    }
-
-    if (!puedeEnviar) {
-      notify("La comunicación inicial ya fue enviada. Para enviar la respuesta final, cambia el estado a Resuelto y guarda la gestión.", {
-        title: "Comunicación ya registrada",
-        tone: "warning",
-      });
-      return;
-    }
-
-    const token = localStorage.getItem("token");
-    if (!token) {
-      notify("Tu sesión ha expirado. Inicia sesión nuevamente.", { title: "Sesión no disponible", tone: "error" });
-      window.location.href = "/";
-      return;
-    }
-
-    setEnviandoMensaje(true);
-    try {
-      const response = await fetch(`${API_URL}/pqrs/responder/${id}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ mensaje }),
-      });
-
-      if (!response.ok) {
-        const detalle = await leerDetalleError(response);
-        throw new Error(`No se pudo enviar el mensaje (${detalle}).`);
-      }
-
-      setMensajeCiudadano("");
-      await notify(
-        esRespuestaFinal ? "La respuesta final se envió correctamente." : "La comunicación se envió correctamente.",
-        { title: esRespuestaFinal ? "Respuesta final enviada" : "Mensaje enviado", tone: "success" }
-      );
-      await cargarDetalle();
-    } catch (error) {
-      console.error("Error enviando la comunicación al ciudadano:", error);
-      notify(error.message || "No fue posible enviar el mensaje.", { title: "No se pudo enviar", tone: "error" });
-    } finally {
-      setEnviandoMensaje(false);
     }
   };
 
@@ -447,10 +436,12 @@ function DetallePQRSAdmin() {
                 <span>{pqrs.archivo}</span>
               </div>
               <a
-                href={`${API_URL}/pqrs/archivo/${encodeURIComponent(pqrs.archivo)}`}
+                href="#"
                 className="admin-detail-attachment-link"
-                target="_blank"
-                rel="noreferrer"
+                onClick={(event) => {
+                  event.preventDefault();
+                  abrirArchivo(pqrs.archivo);
+                }}
               >
                 Abrir archivo ↗
               </a>
@@ -518,60 +509,27 @@ function DetallePQRSAdmin() {
 
               <AdminDetailAccordion
                 id="comunicacion"
-                title={pqrs.respuestaAdmin && String(pqrs.estado || "").trim().toUpperCase() === "RESUELTO" && !pqrs.respuestaFinalEnviada ? "Respuesta final al ciudadano" : "Comunicación al ciudadano"}
-                description="Envía una comunicación vinculada al trámite."
+                title="Comunicación al ciudadano"
+                description="Incluye un mensaje público dentro de esta gestión."
                 icon="mail"
                 open={seccionAbierta === "comunicacion"}
                 onToggle={() => alternarSeccion("comunicacion")}
               >
-                {(() => {
-                  const estadoGuardado = String(pqrs.estado || "").trim().toUpperCase();
-                  const estadoSeleccionado = String(nuevoEstado || "").trim().toUpperCase();
-                  const resuelto = estadoGuardado === "RESUELTO";
-                  const esRespuestaFinal = Boolean(pqrs.respuestaAdmin) && resuelto && !pqrs.respuestaFinalEnviada;
-                  const cambioEstadoPendiente = estadoSeleccionado !== estadoGuardado;
-                  const puedeEnviar = !cambioEstadoPendiente && (!pqrs.respuestaAdmin || esRespuestaFinal);
-                  const ayuda = cambioEstadoPendiente
-                    ? "Guarda primero el cambio de estado. Después podrás enviar la comunicación correspondiente a esa etapa."
-                    : puedeEnviar
-                      ? (esRespuestaFinal
-                        ? "La solicitud está resuelta. Este mensaje se registrará como respuesta final."
-                        : "Esta comunicación se enviará al ciudadano y quedará registrada en el historial.")
-                      : (resuelto
-                        ? "La respuesta final ya fue enviada."
-                        : "La comunicación inicial ya fue enviada. Para enviar la respuesta final, cambia el estado a Resuelto y guarda la gestión.");
-
-                  return (
-                    <>
-                      <label className="admin-detail-field">
-                        <span>{resuelto ? "Respuesta para el ciudadano" : "Mensaje para el ciudadano"}</span>
-                        <textarea
-                          value={mensajeCiudadano}
-                          onChange={(event) => setMensajeCiudadano(event.target.value)}
-                          placeholder={esRespuestaFinal ? "Redacta la respuesta final de la PQRS..." : "Informa al ciudadano sobre la recepción o avance de su solicitud..."}
-                          rows={4}
-                          maxLength={4000}
-                          disabled={!puedeEnviar || enviandoMensaje}
-                        />
-                        <small>{mensajeCiudadano.length}/4000 caracteres</small>
-                      </label>
-                      <p className={`admin-detail-message-disabled ${puedeEnviar ? "is-available" : ""}`}>
-                        {ayuda}
-                      </p>
-                      <div className="admin-detail-message-actions">
-                        <button
-                          className="admin-detail-message-btn"
-                          type="button"
-                          onClick={enviarMensajeCiudadano}
-                          disabled={!puedeEnviar || enviandoMensaje}
-                        >
-                          <AppIcon name="send" size={16} />
-                          {enviandoMensaje ? "Enviando..." : (esRespuestaFinal ? "Enviar respuesta final" : "Enviar mensaje")}
-                        </button>
-                      </div>
-                    </>
-                  );
-                })()}
+                <label className="admin-detail-field">
+                  <span>Respuesta para el ciudadano</span>
+                  <textarea
+                    value={mensajeCiudadano}
+                    onChange={(event) => setMensajeCiudadano(event.target.value)}
+                    placeholder="Escribe la comunicación que recibirá el ciudadano..."
+                    rows={4}
+                    maxLength={4000}
+                    disabled={guardando}
+                  />
+                  <small>{mensajeCiudadano.length}/4000 caracteres</small>
+                </label>
+                <p className="admin-detail-message-disabled is-available">
+                  Esta comunicación se guardará junto con el estado, el agente y la nota interna en un solo movimiento.
+                </p>
               </AdminDetailAccordion>
 
               <AdminDetailAccordion
@@ -641,11 +599,19 @@ function DetallePQRSAdmin() {
                                 </span>
                               )}
 
-                              {(item.mensajeCliente || item.comentarioInterno || item.detalle) && (
+                              {item.detalle && (
+                                <p className="admin-detail-history-note">{item.detalle}</p>
+                              )}
+
+                              {item.mensajeCliente && (
                                 <p className="admin-detail-history-note">
-                                  {item.accion === "RESPUESTA"
-                                    ? (item.mensajeCliente || item.detalle || item.comentarioInterno)
-                                    : (item.comentarioInterno || item.detalle || item.mensajeCliente)}
+                                  <strong>Comunicación al ciudadano:</strong> {item.mensajeCliente}
+                                </p>
+                              )}
+
+                              {item.comentarioInterno && (
+                                <p className="admin-detail-history-note">
+                                  <strong>Nota interna (solo administración):</strong> {item.comentarioInterno}
                                 </p>
                               )}
 
@@ -672,7 +638,7 @@ function DetallePQRSAdmin() {
             </div>
 
             <div className="admin-detail-form-footer">
-              <p>Los cambios de responsable, estado y las notas internas se guardarán juntos.</p>
+              <p>El estado, el agente, la comunicación al ciudadano y la nota interna se guardarán en una sola gestión.</p>
               <button
                 className="admin-detail-save-btn"
                 type="button"

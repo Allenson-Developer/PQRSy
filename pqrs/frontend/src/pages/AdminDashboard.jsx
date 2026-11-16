@@ -1,11 +1,25 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import AppIcon from "../components/AppIcon";
 import { useFeedback } from "../components/FeedbackProvider";
 import "./adminDashboard.css";
 
 function AdminDashboard() {
-  const [vista, setVista] = useState("inicio");
+  const navigate = useNavigate();
+  const location = useLocation();
+  const vista = location.state?.adminDashboardView || "inicio";
+  const cambiarVista = (siguienteVista, replace = false) => {
+    if (siguienteVista === vista) return;
+
+    navigate(location.pathname, {
+      replace,
+      state: {
+        ...(location.state && typeof location.state === "object" ? location.state : {}),
+        adminDashboardView: siguienteVista,
+      },
+    });
+  };
   const [usuario, setUsuario] = useState(() => {
     try { return JSON.parse(localStorage.getItem("user") || "null"); }
     catch { return null; }
@@ -33,9 +47,9 @@ function AdminDashboard() {
 
   return (
     <div className="portal-shell admin-portal">
-      <Navbar role="ADMIN" user={usuario} activeView={vista} onNavigate={setVista} onLogout={logout} />
+      <Navbar role="ADMIN" user={usuario} activeView={vista} onNavigate={cambiarVista} onLogout={logout} />
       <main className="portal-main admin-main">
-        {vista === "inicio" && <AdminInicio onNavigate={setVista} usuario={usuario} />}
+        {vista === "inicio" && <AdminInicio onNavigate={cambiarVista} usuario={usuario} />}
         {vista === "ver" && <AdminPQRS />}
         {vista === "stats" && <AdminStats />}
       </main>
@@ -67,6 +81,86 @@ function AdminInicio({ onNavigate, usuario }) {
   );
 }
 
+
+function AdminInboxFilter({ id, ariaLabel, value, options, onChange }) {
+  const [abierto, setAbierto] = useState(false);
+  const filtroRef = useRef(null);
+  const opcionActual = options.find((opcion) => opcion.value === value) || options[0];
+
+  useEffect(() => {
+    if (!abierto) return;
+
+    const cerrarAlHacerClicFuera = (event) => {
+      if (!filtroRef.current?.contains(event.target)) {
+        setAbierto(false);
+      }
+    };
+
+    const cerrarConEscape = (event) => {
+      if (event.key === "Escape") setAbierto(false);
+    };
+
+    document.addEventListener("pointerdown", cerrarAlHacerClicFuera);
+    document.addEventListener("keydown", cerrarConEscape);
+
+    return () => {
+      document.removeEventListener("pointerdown", cerrarAlHacerClicFuera);
+      document.removeEventListener("keydown", cerrarConEscape);
+    };
+  }, [abierto]);
+
+  return (
+    <div
+      className={`admin-inbox-filter-wrap ${abierto ? "is-open" : ""}`}
+      ref={filtroRef}
+    >
+      <button
+        type="button"
+        className={`admin-inbox-filter ${abierto ? "is-open" : ""}`}
+        onClick={() => setAbierto((actual) => !actual)}
+        aria-expanded={abierto}
+        aria-haspopup="true"
+        aria-controls={`${id}-menu`}
+        aria-label={`${ariaLabel}. Seleccionado: ${opcionActual.label}`}
+      >
+        <AppIcon name="filter" size={17} />
+        <span className="admin-inbox-filter-value">{opcionActual.label}</span>
+        <AppIcon name="chevronDown" size={16} className="admin-inbox-filter-chevron" />
+      </button>
+
+      {abierto && (
+        <div
+          id={`${id}-menu`}
+          className="admin-inbox-filter-menu"
+          role="group"
+          aria-label="Opciones de filtro"
+        >
+          {options.map((opcion) => {
+            const seleccionado = value === opcion.value;
+            return (
+              <button
+                key={opcion.value || "todos"}
+                type="button"
+                className={`admin-inbox-filter-option ${seleccionado ? "is-selected" : ""}`}
+                aria-pressed={seleccionado}
+                onClick={() => {
+                  onChange(opcion.value);
+                  setAbierto(false);
+                }}
+              >
+                <span>{opcion.label}</span>
+                {seleccionado && (
+                  <span className="admin-inbox-filter-option-check" aria-hidden="true">✓</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AdminPQRS() {
   const [pqrs, setPqrs] = useState([]);
   const [filtro, setFiltro] = useState("");
@@ -74,6 +168,23 @@ function AdminPQRS() {
   const [busqueda, setBusqueda] = useState("");
   const [loading, setLoading] = useState(false);
   const [errorCarga, setErrorCarga] = useState("");
+
+  const opcionesTipo = [
+    { value: "", label: "Todos los tipos" },
+    { value: "PETICION", label: "Peticiones" },
+    { value: "QUEJA", label: "Quejas" },
+    { value: "RECLAMO", label: "Reclamos" },
+    { value: "SUGERENCIA", label: "Sugerencias" },
+    { value: "FELICITACION", label: "Felicitaciones" },
+    { value: "DENUNCIA", label: "Denuncias" },
+  ];
+  const opcionesEstado = [
+    { value: "", label: "Todos los estados" },
+    { value: "PENDIENTE", label: "Pendientes" },
+    { value: "PROCESO", label: "En trámite" },
+    { value: "RESUELTO", label: "Resueltas" },
+    { value: "CERRADO", label: "Cerradas" },
+  ];
 
   const cargarPqrs = async () => {
     try {
@@ -228,31 +339,21 @@ function AdminPQRS() {
           />
         </label>
 
-        <label className="admin-inbox-select">
-          <AppIcon name="filter" size={17} />
-          <select value={filtroTipo} onChange={(event) => setFiltroTipo(event.target.value)} aria-label="Filtrar por tipo de PQRS">
-            <option value="">Todos los tipos</option>
-            <option value="PETICION">Peticiones</option>
-            <option value="QUEJA">Quejas</option>
-            <option value="RECLAMO">Reclamos</option>
-            <option value="SUGERENCIA">Sugerencias</option>
-            <option value="FELICITACION">Felicitaciones</option>
-            <option value="DENUNCIA">Denuncias</option>
-          </select>
-          <AppIcon name="chevronDown" size={16} />
-        </label>
+        <AdminInboxFilter
+          id="admin-filter-tipo"
+          ariaLabel="Filtrar por tipo de PQRS"
+          value={filtroTipo}
+          options={opcionesTipo}
+          onChange={setFiltroTipo}
+        />
 
-        <label className="admin-inbox-select">
-          <AppIcon name="filter" size={17} />
-          <select value={filtro} onChange={(event) => setFiltro(event.target.value)} aria-label="Filtrar por estado de PQRS">
-            <option value="">Todos los estados</option>
-            <option value="PENDIENTE">Pendientes</option>
-            <option value="PROCESO">En trámite</option>
-            <option value="RESUELTO">Resueltas</option>
-            <option value="CERRADO">Cerradas</option>
-          </select>
-          <AppIcon name="chevronDown" size={16} />
-        </label>
+        <AdminInboxFilter
+          id="admin-filter-estado"
+          ariaLabel="Filtrar por estado de PQRS"
+          value={filtro}
+          options={opcionesEstado}
+          onChange={setFiltro}
+        />
 
         <button type="button" className="admin-inbox-clear" onClick={limpiarFiltros} disabled={!hayFiltrosActivos}>
           Limpiar

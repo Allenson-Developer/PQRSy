@@ -72,6 +72,7 @@ function DetallePQRS({ pqrs: pqrsInicial = null, volver }) {
       ASIGNACION: "Asignación de agente",
       CIERRE: "Caso cerrado",
       REAPERTURA: "Caso reabierto",
+      GESTION_COMPLETA: "Gestión administrativa",
     };
     return acciones[accion] || String(accion || "Actualización").replaceAll("_", " ");
   };
@@ -84,6 +85,7 @@ function DetallePQRS({ pqrs: pqrsInicial = null, volver }) {
       ASIGNACION: "👤",
       CIERRE: "✓",
       REAPERTURA: "↗",
+      GESTION_COMPLETA: "↻",
     };
     return iconos[accion] || "•";
   };
@@ -192,8 +194,8 @@ function DetallePQRS({ pqrs: pqrsInicial = null, volver }) {
 
   if (loading) {
     return (
-      <div className="detalle-container">
-        <div className="detalle-card loading-card">
+      <div className="detalle-container detalle-v2">
+        <div className="detalle-v2-state" role="status">
           <div className="loading-spinner" aria-hidden="true" />
           <p>Cargando información de la solicitud...</p>
         </div>
@@ -203,22 +205,34 @@ function DetallePQRS({ pqrs: pqrsInicial = null, volver }) {
 
   if (!pqrs) {
     return (
-      <div className="detalle-container">
-        <button type="button" className="volver-btn" onClick={handleVolver}>← Volver a Mis Solicitudes</button>
-        <div className="detalle-card detalle-error-card" role="alert">
-          <h2>No se pudo mostrar la PQRS</h2>
+      <div className="detalle-container detalle-v2">
+        <button type="button" className="detalle-v2-back" onClick={handleVolver}>← Volver a Mis solicitudes</button>
+        <div className="detalle-v2-error" role="alert">
+          <strong>No se pudo mostrar la PQRS</strong>
           <p>{errorDetalle || "No se encontró la solicitud."}</p>
         </div>
       </div>
     );
   }
 
-  const idVisible = pqrs.id || pqrs._id || id;
+  const idVisible = pqrs.codigoPQRS || pqrs.codigoPqrs || pqrs.codigo || pqrs.numeroRadicado || pqrs.id || pqrs._id || id;
   const estado = pqrs.estado || "Sin estado";
+  const fechaCreacion = formatoFecha(pqrs.fecha);
 
   return (
-    <div className="detalle-container">
-      <button type="button" className="volver-btn" onClick={handleVolver}>← Volver a Mis Solicitudes</button>
+    <div className="detalle-container detalle-v2">
+      <button type="button" className="detalle-v2-back" onClick={handleVolver}>
+        <span aria-hidden="true">←</span> Volver a Mis solicitudes
+      </button>
+
+      <header className="detalle-v2-heading">
+        <span className="detalle-v2-heading-mark" aria-hidden="true">▤</span>
+        <div>
+          <span className="detalle-v2-eyebrow">HOODVOICE CARTAGENA</span>
+          <h1>Seguimiento de solicitud</h1>
+          <p>Consulta la información y el historial de movimientos de tu PQRS.</p>
+        </div>
+      </header>
 
       {errorDetalle && (
         <div className="detalle-alerta" role="status">
@@ -226,110 +240,122 @@ function DetallePQRS({ pqrs: pqrsInicial = null, volver }) {
         </div>
       )}
 
-      <section className="detalle-hero">
-        <div className="detalle-hero-content">
-          <span className="detalle-badge">Caso #{idVisible}</span>
-          <h1>{pqrs.tipo || "Solicitud PQRS"}</h1>
-          <p>Consulta el estado y los movimientos registrados de tu solicitud.</p>
+      <section className="detalle-v2-case-banner" aria-label="Resumen de la solicitud">
+        <div className="detalle-v2-case-icon" aria-hidden="true">{obtenerIcono("CREAR_PQRS")}</div>
+        <div className="detalle-v2-case-copy">
+          <span>EXPEDIENTE</span>
+          <h2>{idVisible ? `Caso: ${idVisible}` : "Detalle de la solicitud"}</h2>
+          <p>Tipo: {pqrs.tipo || "No especificado"}</p>
         </div>
-        <span className={`detalle-estado estado ${obtenerClaseEstado(estado)}`}>
-          {estado}
-        </span>
+        <span className={`detalle-v2-status estado ${obtenerClaseEstado(estado)}`}>{estado}</span>
       </section>
 
-      <section className="detalle-card premium-card">
-        <div className="detalle-grid">
-          <div className="detalle-main-info">
-            <div className="detalle-section">
-              <span className="detalle-label">Solicitante</span>
-              <h3 className="detalle-user-name">👤 {pqrs.nombre || "Usuario"}</h3>
-            </div>
-            <div className="detalle-section">
-              <span className="detalle-label">Descripción</span>
-              <p className="detalle-descripcion">{pqrs.descripcion || "Sin descripción disponible."}</p>
+      <div className="detalle-v2-columns">
+        <section className="detalle-v2-panel detalle-v2-information">
+          <div className="detalle-v2-panel-heading">
+            <span className="detalle-v2-panel-icon" aria-hidden="true">ⓘ</span>
+            <div>
+              <h2>Información de la solicitud</h2>
+              <p>Datos registrados para este caso.</p>
             </div>
           </div>
 
-          <aside className="detalle-side-info">
-            <div className="info-card">
-              <span>📅 Fecha de creación</span>
-              <strong>{formatoFecha(pqrs.fecha)}</strong>
+          <dl className="detalle-v2-info-list">
+            <div className="detalle-v2-info-row">
+              <dt><span aria-hidden="true">◇</span> Estado</dt>
+              <dd><span className={`detalle-v2-inline-status estado ${obtenerClaseEstado(estado)}`}>{estado}</span></dd>
             </div>
-            <div className="info-card">
-              <span>👨‍💼 Agente asignado</span>
-              <strong>{pqrs.agenteAsignado || "Sin asignar"}</strong>
+            <div className="detalle-v2-info-row">
+              <dt><span aria-hidden="true">▤</span> Tipo</dt>
+              <dd>{pqrs.tipo || "No especificado"}</dd>
             </div>
-            {pqrs.archivo && (
-              <button type="button" className="archivo-card" onClick={() => abrirArchivo(pqrs.archivo)}>
-                <span>📎 Archivo adjunto</span>
-                <strong>Ver documento ↗</strong>
-              </button>
-            )}
-          </aside>
-        </div>
-      </section>
+            <div className="detalle-v2-info-row">
+              <dt><span aria-hidden="true">♙</span> Solicitante</dt>
+              <dd>{pqrs.nombre || pqrs.username || "Usuario"}</dd>
+            </div>
+            <div className="detalle-v2-info-row">
+              <dt><span aria-hidden="true">▦</span> Fecha de creación</dt>
+              <dd>{fechaCreacion}</dd>
+            </div>
+            <div className="detalle-v2-info-row">
+              <dt><span aria-hidden="true">♧</span> Agente asignado</dt>
+              <dd>{pqrs.agenteAsignado || "Sin asignar"}</dd>
+            </div>
+            <div className="detalle-v2-description-row">
+              <dt><span aria-hidden="true">▤</span> Descripción</dt>
+              <dd>{pqrs.descripcion || "Sin descripción disponible."}</dd>
+            </div>
+          </dl>
 
-      <section className="timeline-wrapper">
-        <div className="timeline-header">
-          <div>
-            <span className="detalle-kicker">ACTIVIDAD DEL CASO</span>
-            <h2>Seguimiento de la solicitud</h2>
-            <p>Historial cronológico de movimientos y respuestas registrados.</p>
-          </div>
-          <span className="timeline-count">{historial.length} {historial.length === 1 ? "movimiento" : "movimientos"}</span>
-        </div>
+          {pqrs.archivo && (
+            <button type="button" className="detalle-v2-attachment" onClick={() => abrirArchivo(pqrs.archivo)}>
+              <span aria-hidden="true">📎</span>
+              <span><strong>Documento adjunto</strong><small>{pqrs.archivo}</small></span>
+              <b>Ver documento ↗</b>
+            </button>
+          )}
+        </section>
 
-        {errorHistorial && (
-          <div className="detalle-alerta" role="status">
-            No se pudo recuperar el historial desde el servidor: {errorHistorial}
+        <section className="detalle-v2-panel detalle-v2-history">
+          <div className="detalle-v2-panel-heading detalle-v2-history-heading">
+            <span className="detalle-v2-panel-icon" aria-hidden="true">▱</span>
+            <div>
+              <h2>Historial de movimientos</h2>
+              <p>Registro cronológico de las acciones y respuestas de tu solicitud.</p>
+            </div>
+            <span className="detalle-v2-count">{historial.length} {historial.length === 1 ? "movimiento" : "movimientos"}</span>
           </div>
-        )}
 
-        {!errorHistorial && historial.length === 0 ? (
-          <div className="empty-box detalle-empty">
-            <span className="detalle-empty-icon">📋</span>
-            <h3>Aún no hay movimientos registrados</h3>
-            <p>Cuando se registren cambios de estado, respuestas o asignaciones, aparecerán aquí.</p>
-          </div>
-        ) : (
-          <div className="timeline">
-            {historial.map((movimiento, index) => (
-              <article
-                key={movimiento.id || movimiento._id || `${movimiento.accion || "movimiento"}-${movimiento.fecha || index}-${index}`}
-                className="timeline-item"
-              >
-                <div className="timeline-marker" aria-hidden="true">{obtenerIcono(movimiento.accion)}</div>
-                <div className="timeline-content">
-                  <div className="timeline-top">
-                    <div>
+          {errorHistorial && (
+            <div className="detalle-alerta" role="status">
+              No se pudo recuperar el historial desde el servidor: {errorHistorial}
+            </div>
+          )}
+
+          {!errorHistorial && historial.length === 0 ? (
+            <div className="detalle-v2-empty">
+              <span aria-hidden="true">▤</span>
+              <strong>Aún no hay movimientos registrados</strong>
+              <p>Cuando se registren cambios de estado, respuestas o asignaciones, aparecerán aquí.</p>
+            </div>
+          ) : (
+            <div className="detalle-v2-timeline">
+              {historial.map((movimiento, index) => (
+                <article
+                  key={movimiento.id || movimiento._id || `${movimiento.accion || "movimiento"}-${movimiento.fecha || index}-${index}`}
+                  className="detalle-v2-event"
+                >
+                  <div className="detalle-v2-event-marker" aria-hidden="true">{obtenerIcono(movimiento.accion)}</div>
+                  <div className="detalle-v2-event-card">
+                    <div className="detalle-v2-event-top">
                       <h3>{formatearAccion(movimiento.accion)}</h3>
-                      <span className="timeline-responsable">{movimiento.responsable || "Sistema"}</span>
+                      <time>{formatoFecha(movimiento.fecha)}</time>
                     </div>
-                    <time>{formatoFecha(movimiento.fecha)}</time>
+                    <div className="detalle-v2-event-tags">
+                      {movimiento.estadoNuevo && (
+                        <span className={`detalle-v2-inline-status estado ${obtenerClaseEstado(movimiento.estadoNuevo)}`}>
+                          {movimiento.estadoNuevo}
+                        </span>
+                      )}
+                      {movimiento.responsable && <span className="detalle-v2-person">♙ {movimiento.responsable}</span>}
+                    </div>
+                    {movimiento.tipo && <p className="detalle-v2-event-type">Tipo de solicitud: <strong>{movimiento.tipo}</strong></p>}
+                    {movimiento.detalle && <p className="detalle-v2-event-message">{movimiento.detalle}</p>}
+                    {movimiento.mensajeCliente && <p className="detalle-v2-event-message">💬 {movimiento.mensajeCliente}</p>}
+                    {movimiento.estadoAnterior && movimiento.estadoNuevo && (
+                      <div className="detalle-v2-state-change">
+                        <span className={`estado-mini ${obtenerClaseEstado(movimiento.estadoAnterior)}`}>{movimiento.estadoAnterior}</span>
+                        <span aria-hidden="true">→</span>
+                        <span className={`estado-mini ${obtenerClaseEstado(movimiento.estadoNuevo)}`}>{movimiento.estadoNuevo}</span>
+                      </div>
+                    )}
                   </div>
-
-                  {movimiento.estadoNuevo && (
-                    <span className={`estado-mini ${obtenerClaseEstado(movimiento.estadoNuevo)}`}>
-                      {movimiento.estadoNuevo}
-                    </span>
-                  )}
-
-                  {movimiento.detalle && <p className="timeline-detail">{movimiento.detalle}</p>}
-                  {movimiento.mensajeCliente && <p className="timeline-message">💬 {movimiento.mensajeCliente}</p>}
-
-                  {movimiento.estadoAnterior && movimiento.estadoNuevo && (
-                    <div className="timeline-change">
-                      <span className={`estado-mini ${obtenerClaseEstado(movimiento.estadoAnterior)}`}>{movimiento.estadoAnterior}</span>
-                      <span aria-hidden="true">→</span>
-                      <span className={`estado-mini ${obtenerClaseEstado(movimiento.estadoNuevo)}`}>{movimiento.estadoNuevo}</span>
-                    </div>
-                  )}
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
-      </section>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
     </div>
   );
 }

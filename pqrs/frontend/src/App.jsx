@@ -13,6 +13,20 @@ function leerUsuario() {
   catch { return null; }
 }
 
+function RutaLogin({ children }) {
+  const user = leerUsuario();
+  const token = localStorage.getItem("token");
+  const role = String(user?.role || "").toUpperCase();
+
+  // Si se vuelve atrás hasta Login con una sesión activa, mostrar Home
+  // sin cerrar la sesión ni devolver al usuario al panel automáticamente.
+  if (token && (role === "USER" || role === "ADMIN")) {
+    return <Navigate to="/" replace />;
+  }
+
+  return children;
+}
+
 function RutaUser({ children }) {
   const user = leerUsuario();
   if (!user || String(user.role || "").toUpperCase() !== "USER") return <Navigate to="/" replace />;
@@ -30,7 +44,7 @@ function AppRoutes() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Home />} />
-        <Route path="/login" element={<Login />} />
+        <Route path="/login" element={<RutaLogin><Login /></RutaLogin>} />
         <Route path="/register" element={<Register />} />
         <Route path="/user" element={<RutaUser><UserDashboard /></RutaUser>} />
         <Route path="/detalle/:id" element={<RutaUser><DetallePQRS /></RutaUser>} />

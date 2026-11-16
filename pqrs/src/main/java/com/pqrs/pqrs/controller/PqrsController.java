@@ -11,6 +11,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Objects;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -104,20 +105,28 @@ public class PqrsController {
                                    @RequestParam(value = "archivo", required = false) MultipartFile archivo) {
 
         try {
+            // El ID enviado desde el navegador no se considera confiable por sí solo.
+            // La PQRS debe pertenecer al usuario autenticado en el token.
+            Usuario usuarioAutenticado = obtenerUsuarioAutenticado();
+            if (usuarioAutenticado == null || usuarioAutenticado.getId() == null) {
+                return ResponseEntity.status(401)
+                        .body("No se pudo identificar al usuario autenticado.");
+            }
+
+            if (!usuarioAutenticado.getId().equals(usuarioId)) {
+                return ResponseEntity.status(403)
+                        .body("No puedes crear una PQRS a nombre de otro usuario.");
+            }
+
             Pqrs pqrs = new Pqrs();
             pqrs.setTipo(tipo);
             pqrs.setDescripcion(descripcion);
-            pqrs.setUsuarioId(usuarioId);
+            pqrs.setUsuarioId(usuarioAutenticado.getId());
+            pqrs.setUsername(usuarioAutenticado.getUsername());
+            pqrs.setNombre(usuarioAutenticado.getNombre());
             pqrs.setFecha(new Date());
             pqrs.setEstado("PENDIENTE");
             pqrs.setPrioridad("MEDIA");
-
-            Optional<Usuario> userOpt = usuarioRepo.findById(usuarioId);
-            if (userOpt.isPresent()) {
-                Usuario user = userOpt.get();
-                pqrs.setUsername(user.getUsername());
-                pqrs.setNombre(user.getNombre());
-            }
 
             if (archivo != null && !archivo.isEmpty()) {
                 Path directorio = Paths.get(uploadDir).toAbsolutePath().normalize();
@@ -137,7 +146,11 @@ public class PqrsController {
             historial.setEstadoAnterior(null);
             historial.setEstadoNuevo("PENDIENTE");
             historial.setFecha(new Date());
-            historial.setResponsable(userOpt.isPresent() ? userOpt.get().getNombre() : "Usuario");
+            historial.setResponsable(
+                    usuarioAutenticado.getNombre() != null
+                            ? usuarioAutenticado.getNombre()
+                            : usuarioAutenticado.getUsername()
+            );
             historial.setComentarioInterno("PQRS creada correctamente.");
             historial.setMensajeCliente("Tu PQRS fue creada exitosamente.");
             historial.setVisibleCliente(true);
@@ -159,36 +172,63 @@ public class PqrsController {
     //////////////////////////////////////////////////////
     @PutMapping("/{id}/responder")
     public ResponseEntity<?> responder(@PathVariable String id, @RequestBody Map<String, String> body) {
+        return registrarRespuesta(id, body);
+    }
+
+    // Ruta utilizada actualmente por el panel administrativo (POST /pqrs/responder/{id}).
+    // Se conserva también la ruta PUT anterior para no romper integraciones existentes.
+    @PostMapping("/responder/{id}")
+    public ResponseEntity<?> responderDesdePanel(@PathVariable String id, @RequestBody Map<String, String> body) {
+        return registrarRespuesta(id, body);
+    }
+
+    private ResponseEntity<?> registrarRespuesta(String id, Map<String, String> body) {
         try {
             Optional<Pqrs> pqrsOpt = repo.findById(id);
             if (pqrsOpt.isEmpty()) return ResponseEntity.status(404).body("PQRS no encontrada");
 
-            String mensaje = body.get("respuesta");
-            String autor = body.get("autor");
-            if (mensaje == null || mensaje.trim().isEmpty())
-                return ResponseEntity.badRequest().body("La respuesta no puede estar vacía");
-
             Pqrs pqrs = pqrsOpt.get();
+            Usuario usuarioAutenticado = obtenerUsuarioAutenticado();
+            if (usuarioAutenticado == null) {
+                return ResponseEntity.status(401).body("Debes iniciar sesión para responder esta PQRS.");
+            }
 
-            Respuesta r = new Respuesta();
-            r.setMensaje(mensaje);
-            r.setAutor(autor != null ? autor : "ADMIN");
-            r.setRol(body.get("rol") != null ? body.get("rol") : "ADMIN");
-            r.setFecha(new Date());
+            boolean esPropietario = usuarioAutenticado.getId() != null
+                    && usuarioAutenticado.getId().equals(pqrs.getUsuarioId());
+            if (!"ADMIN".equalsIgnoreCase(usuarioAutenticado.getRole())
+                    && !esPropietario) {
+                return ResponseEntity.status(403)
+                        .body("No tienes permiso para responder esta PQRS.");
+            }
+
+            // El panel actual envía "mensaje"; se mantiene "respuesta" por compatibilidad
+            // con la ruta PUT anterior.
+            String mensaje = body.get("mensaje");
+            if (mensaje == null || mensaje.trim().isEmpty()) {
+                mensaje = body.get("respuesta");
+            }
+            if (mensaje == null || mensaje.trim().isEmpty()) {
+                return ResponseEntity.badRequest().body("La respuesta no puede estar vacía");
+            }
+            mensaje = mensaje.trim();
+
+            String nombreResponsable = usuarioAutenticado.getNombre() != null
+                    && !usuarioAutenticado.getNombre().trim().isEmpty()
+                    ? usuarioAutenticado.getNombre().trim()
+                    : usuarioAutenticado.getUsername();
+
+            Respuesta respuesta = new Respuesta();
+            respuesta.setMensaje(mensaje);
+            respuesta.setAutor(nombreResponsable != null ? nombreResponsable : "Usuario");
+            respuesta.setRol(usuarioAutenticado.getRole());
+            respuesta.setFecha(new Date());
 
             if (pqrs.getRespuestas() == null) pqrs.setRespuestas(new ArrayList<>());
-            pqrs.getRespuestas().add(r);
+            pqrs.getRespuestas().add(respuesta);
 
-         //////////////////////////////////////////////////////
-         // PRIMERA RESPUESTA
-         //////////////////////////////////////////////////////
-
-           if (pqrs.getFechaPrimeraRespuesta() == null) {
-
-            pqrs.setFechaPrimeraRespuesta(
-            new Date()
-           );
-          }
+            if (pqrs.getFechaPrimeraRespuesta() == null) {
+                pqrs.setFechaPrimeraRespuesta(new Date());
+            }
             repo.save(pqrs);
 
             HistorialPQRS historial = new HistorialPQRS();
@@ -197,7 +237,7 @@ public class PqrsController {
             historial.setEstadoAnterior(pqrs.getEstado());
             historial.setEstadoNuevo(pqrs.getEstado());
             historial.setFecha(new Date());
-            historial.setResponsable(autor != null ? autor : "ADMIN");
+            historial.setResponsable(nombreResponsable != null ? nombreResponsable : "Sistema");
             historial.setComentarioInterno("Se agregó una respuesta al PQRS.");
             historial.setMensajeCliente(mensaje);
             historial.setVisibleCliente(true);
@@ -542,32 +582,141 @@ public class PqrsController {
     public ResponseEntity<?> gestionCompleta(@PathVariable String id, @RequestBody Map<String, String> body) {
         try {
             Optional<Pqrs> pqrsOpt = repo.findById(id);
-            if (pqrsOpt.isEmpty()) return ResponseEntity.status(404).body("PQRS no encontrada");
-
-            Pqrs pqrs = pqrsOpt.get();
-            String agente = body.get("agente");
-            String estado = body.get("estado");
-            String comentario = body.get("comentario");
-            String responsable = body.get("responsable");
-
-            if (agente != null && !agente.isEmpty()) pqrs.setAgenteAsignado(agente);
-
-            String estadoAnterior = pqrs.getEstado();
-            if (estado != null && !estado.isEmpty() && !estadoAnterior.equalsIgnoreCase(estado)) {
-                pqrs.setEstado(estado.toUpperCase());
+            if (pqrsOpt.isEmpty()) {
+                return ResponseEntity.status(404).body("PQRS no encontrada");
             }
 
-            repo.save(pqrs);
+            Pqrs pqrs = pqrsOpt.get();
+            String estadoAnterior = pqrs.getEstado();
+            String agenteAnterior = pqrs.getAgenteAsignado();
 
+            // El responsable se obtiene de la sesión autenticada y no del dato enviado por el navegador.
+            Usuario administrador = obtenerUsuarioAutenticado();
+            String responsable = administrador != null
+                    && administrador.getUsername() != null
+                    && !administrador.getUsername().trim().isEmpty()
+                    ? administrador.getUsername().trim()
+                    : "ADMIN";
+
+            String estadoSolicitado = body.get("estado");
+            String estadoNuevo = estadoAnterior;
+            if (estadoSolicitado != null && !estadoSolicitado.trim().isEmpty()) {
+                estadoNuevo = estadoSolicitado.trim().toUpperCase();
+                boolean estadoValido = "PENDIENTE".equals(estadoNuevo)
+                        || "PROCESO".equals(estadoNuevo)
+                        || "RESUELTO".equals(estadoNuevo)
+                        || "CERRADO".equals(estadoNuevo);
+
+                if (!estadoValido) {
+                    return ResponseEntity.badRequest().body("El estado indicado no es válido.");
+                }
+            }
+
+            boolean cambioEstado = !Objects.equals(
+                    estadoAnterior == null ? null : estadoAnterior.trim().toUpperCase(),
+                    estadoNuevo == null ? null : estadoNuevo.trim().toUpperCase()
+            );
+
+            // Si el campo agente viene vacío, se interpreta como retirar la asignación.
+            boolean agenteIncluido = body.containsKey("agente");
+            String agenteNuevo = agenteAnterior;
+            if (agenteIncluido) {
+                String agenteSolicitado = body.get("agente");
+                agenteNuevo = agenteSolicitado == null || agenteSolicitado.trim().isEmpty()
+                        ? null
+                        : agenteSolicitado.trim();
+            }
+
+            boolean cambioAgente = !Objects.equals(
+                    agenteAnterior == null || agenteAnterior.trim().isEmpty() ? null : agenteAnterior.trim(),
+                    agenteNuevo == null || agenteNuevo.trim().isEmpty() ? null : agenteNuevo.trim()
+            );
+
+            String comentarioInterno = body.get("comentario");
+            comentarioInterno = comentarioInterno == null ? "" : comentarioInterno.trim();
+
+            String mensajeCliente = body.get("mensajeCliente");
+            if (mensajeCliente == null) {
+                mensajeCliente = body.get("mensaje");
+            }
+            mensajeCliente = mensajeCliente == null ? "" : mensajeCliente.trim();
+
+            boolean hayGestion = cambioEstado || cambioAgente
+                    || !comentarioInterno.isEmpty() || !mensajeCliente.isEmpty();
+            if (!hayGestion) {
+                return ResponseEntity.badRequest().body("No hay cambios ni información para registrar.");
+            }
+
+            if (cambioEstado) {
+                pqrs.setEstado(estadoNuevo);
+            }
+            if (cambioAgente) {
+                pqrs.setAgenteAsignado(agenteNuevo);
+            }
+
+            // La comunicación también se conserva en la lista de respuestas de la PQRS,
+            // igual que ocurría con el endpoint anterior de responder.
+            if (!mensajeCliente.isEmpty()) {
+                String nombreResponsable = administrador != null
+                        && administrador.getNombre() != null
+                        && !administrador.getNombre().trim().isEmpty()
+                        ? administrador.getNombre().trim()
+                        : responsable;
+
+                Respuesta respuesta = new Respuesta();
+                respuesta.setMensaje(mensajeCliente);
+                respuesta.setAutor(nombreResponsable);
+                respuesta.setRol(administrador != null ? administrador.getRole() : "ADMIN");
+                respuesta.setFecha(new Date());
+
+                if (pqrs.getRespuestas() == null) {
+                    pqrs.setRespuestas(new ArrayList<>());
+                }
+                pqrs.getRespuestas().add(respuesta);
+
+                if (pqrs.getFechaPrimeraRespuesta() == null) {
+                    pqrs.setFechaPrimeraRespuesta(new Date());
+                }
+            }
+
+            // Guardar los datos de la PQRS una sola vez.
+            if (cambioEstado || cambioAgente || !mensajeCliente.isEmpty()) {
+                repo.save(pqrs);
+            }
+
+            // Un solo documento de historial representa toda la acción de Guardar gestión.
+            // Los campos públicos y privados conviven en el registro, pero el endpoint
+            // del ciudadano devuelve una proyección que excluye comentarioInterno.
             HistorialPQRS historial = new HistorialPQRS();
             historial.setPqrsId(pqrs.getId());
             historial.setAccion("GESTION_COMPLETA");
-            historial.setEstadoAnterior(estadoAnterior);
+            historial.setEstadoAnterior(cambioEstado ? estadoAnterior : null);
             historial.setEstadoNuevo(pqrs.getEstado());
             historial.setFecha(new Date());
-            historial.setResponsable(responsable != null ? responsable : "ADMIN");
-            historial.setComentarioInterno(comentario != null ? comentario : "");
-            historial.setVisibleCliente(false);
+            historial.setResponsable(responsable);
+            historial.setMensajeCliente(mensajeCliente.isEmpty() ? null : mensajeCliente);
+            historial.setComentarioInterno(comentarioInterno.isEmpty() ? null : comentarioInterno);
+            historial.setVisibleCliente(cambioEstado || cambioAgente || !mensajeCliente.isEmpty());
+
+            List<String> detallesGestion = new ArrayList<>();
+            if (cambioEstado) {
+                detallesGestion.add("Estado: "
+                        + (estadoAnterior == null ? "Sin estado" : estadoAnterior)
+                        + " → " + estadoNuevo);
+            }
+            if (cambioAgente) {
+                detallesGestion.add("Agente: "
+                        + (agenteAnterior == null || agenteAnterior.trim().isEmpty() ? "Sin asignar" : agenteAnterior)
+                        + " → "
+                        + (agenteNuevo == null ? "Sin asignar" : agenteNuevo));
+            }
+            if (detallesGestion.isEmpty() && !mensajeCliente.isEmpty()) {
+                detallesGestion.add("Se registró una comunicación al ciudadano.");
+            }
+            if (detallesGestion.isEmpty() && !comentarioInterno.isEmpty()) {
+                detallesGestion.add("Se agregó una nota administrativa.");
+            }
+            historial.setDetalle(String.join(" · ", detallesGestion));
             historialRepo.save(historial);
 
             return ResponseEntity.ok(pqrs);
@@ -576,6 +725,25 @@ public class PqrsController {
             response.put("mensaje", "Error al guardar gestión completa");
             response.put("error", e.getMessage());
             return ResponseEntity.status(500).body(response);
+        }
+    }
+
+    private String obtenerMensajeEstadoCliente(String estado) {
+        if (estado == null) {
+            return "El estado de tu solicitud fue actualizado por el equipo administrativo.";
+        }
+
+        switch (estado.toUpperCase()) {
+            case "PENDIENTE":
+                return "Tu solicitud quedó pendiente de revisión.";
+            case "PROCESO":
+                return "Tu solicitud está en trámite.";
+            case "RESUELTO":
+                return "Tu solicitud ha sido marcada como resuelta por el equipo administrativo.";
+            case "CERRADO":
+                return "Tu solicitud ha sido cerrada por el equipo administrativo.";
+            default:
+                return "El estado de tu solicitud fue actualizado por el equipo administrativo.";
         }
     }
 
@@ -604,7 +772,22 @@ public class PqrsController {
      List<HistorialPQRS> historialVisible =
             historialRepo.findByPqrsIdAndVisibleClienteTrueOrderByFechaAsc(id);
 
-     return ResponseEntity.ok(historialVisible);
+     // Proyectar solo los campos públicos. Una gestión puede contener una nota
+     // interna junto con información visible, y esa nota no debe salir al USER.
+     List<Map<String, Object>> historialPublico = new ArrayList<>();
+     for (HistorialPQRS movimiento : historialVisible) {
+         Map<String, Object> item = new HashMap<>();
+         item.put("accion", movimiento.getAccion());
+         item.put("estadoAnterior", movimiento.getEstadoAnterior());
+         item.put("estadoNuevo", movimiento.getEstadoNuevo());
+         item.put("fecha", movimiento.getFecha());
+         item.put("responsable", movimiento.getResponsable());
+         item.put("mensajeCliente", movimiento.getMensajeCliente());
+         item.put("detalle", movimiento.getDetalle());
+         historialPublico.add(item);
+     }
+
+     return ResponseEntity.ok(historialPublico);
    
     }
 

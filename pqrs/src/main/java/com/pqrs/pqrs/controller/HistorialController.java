@@ -85,13 +85,24 @@ public class HistorialController {
         try {
 
             List<HistorialPQRS> historial =
+                    historialRepo.findByPqrsIdAndVisibleClienteTrueOrderByFechaAsc(pqrsId);
 
-                    historialRepo
-                            .findByPqrsIdAndVisibleClienteTrueOrderByFechaAsc(
-                                    pqrsId
-                            );
+            // No devolver la entidad completa: una gestión puede contener también
+            // comentarioInterno, que es información exclusiva de administración.
+            List<Map<String, Object>> historialPublico = new java.util.ArrayList<>();
+            for (HistorialPQRS movimiento : historial) {
+                Map<String, Object> item = new HashMap<>();
+                item.put("accion", movimiento.getAccion());
+                item.put("estadoAnterior", movimiento.getEstadoAnterior());
+                item.put("estadoNuevo", movimiento.getEstadoNuevo());
+                item.put("fecha", movimiento.getFecha());
+                item.put("responsable", movimiento.getResponsable());
+                item.put("mensajeCliente", movimiento.getMensajeCliente());
+                item.put("detalle", movimiento.getDetalle());
+                historialPublico.add(item);
+            }
 
-            return ResponseEntity.ok(historial);
+            return ResponseEntity.ok(historialPublico);
 
         } catch (Exception e) {
 
