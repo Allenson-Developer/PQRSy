@@ -77,6 +77,11 @@ public class Pqrs {
 
     private String agenteAsignado;
 
+    // Identificador de la cuenta ADMIN responsable.
+    // agenteAsignado se conserva para mostrar el nombre y mantener compatibilidad
+    // con las asignaciones históricas guardadas como texto.
+    private String agenteAsignadoId;
+
     //////////////////////////////////////////////////////
     // RESPUESTAS CHAT
     //////////////////////////////////////////////////////
@@ -247,6 +252,14 @@ public class Pqrs {
     public void setAgenteAsignado(String agenteAsignado) {
 
         this.agenteAsignado = agenteAsignado;
+    }
+
+    public String getAgenteAsignadoId() {
+        return agenteAsignadoId;
+    }
+
+    public void setAgenteAsignadoId(String agenteAsignadoId) {
+        this.agenteAsignadoId = agenteAsignadoId;
     }
 
     //////////////////////////////////////////////////////

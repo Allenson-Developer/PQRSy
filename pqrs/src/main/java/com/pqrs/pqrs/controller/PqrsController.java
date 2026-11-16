@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Objects;
@@ -86,6 +87,14 @@ public class PqrsController {
             && usuario.getId() != null
             && usuario.getId().equals(usuarioId);
 }
+
+   private String nombreVisibleAdministrador(Usuario usuario) {
+    if (usuario == null) return null;
+    String nombre = usuario.getNombre() == null ? "" : usuario.getNombre().trim();
+    String apellido = usuario.getApellido() == null ? "" : usuario.getApellido().trim();
+    String completo = (nombre + " " + apellido).trim();
+    return completo.isEmpty() ? usuario.getUsername() : completo;
+   }
 
     //////////////////////////////////////////////////////
     // TEST
@@ -491,6 +500,66 @@ public class PqrsController {
         return ResponseEntity.ok(repo.findAll());
     }
 
+    // Consulta las PQRS de un administrador seleccionado desde el panel compartido.
+    // SecurityConfig restringe esta ruta al rol ADMIN.
+    // Las asignaciones nuevas se identifican por ID; se conservan coincidencias
+    // exactas de nombre/username para las asignaciones antiguas guardadas como texto.
+    @GetMapping("/asignadas/{administradorId}")
+    public ResponseEntity<?> listarAsignadasAlAdministradorSeleccionado(@PathVariable String administradorId) {
+        Usuario administrador = usuarioRepo.findById(administradorId).orElse(null);
+        if (administrador == null || !"ADMIN".equalsIgnoreCase(administrador.getRole())
+                || !"ACTIVO".equalsIgnoreCase(administrador.getEstado())) {
+            return ResponseEntity.status(404).body("El administrador seleccionado no existe o está inactivo.");
+        }
+
+        return ResponseEntity.ok(obtenerPqrsAsignadas(administrador));
+    }
+
+    // Se conserva el endpoint personal anterior para no romper clientes existentes.
+    @GetMapping("/asignadas")
+    public ResponseEntity<?> listarAsignadasAlAdministrador() {
+        Usuario administrador = obtenerUsuarioAutenticado();
+        if (administrador == null) {
+            return ResponseEntity.status(401).body("No se pudo identificar la sesión.");
+        }
+        if (!"ADMIN".equalsIgnoreCase(administrador.getRole())) {
+            return ResponseEntity.status(403).body("Esta bandeja es exclusiva para administradores.");
+        }
+        return ResponseEntity.ok(obtenerPqrsAsignadas(administrador));
+    }
+
+    private List<Pqrs> obtenerPqrsAsignadas(Usuario administrador) {
+        Map<String, Pqrs> resultados = new LinkedHashMap<>();
+        for (Pqrs item : repo.findByAgenteAsignadoId(administrador.getId())) {
+            if (item.getId() != null) resultados.put(item.getId(), item);
+        }
+
+        List<String> valoresHistoricos = new ArrayList<>();
+        if (administrador.getUsername() != null && !administrador.getUsername().isBlank()) {
+            valoresHistoricos.add(administrador.getUsername().trim());
+        }
+        if (administrador.getNombre() != null && !administrador.getNombre().isBlank()) {
+            valoresHistoricos.add(administrador.getNombre().trim());
+        }
+        String nombreCompleto = nombreVisibleAdministrador(administrador);
+        if (nombreCompleto != null && !nombreCompleto.isBlank()) {
+            valoresHistoricos.add(nombreCompleto.trim());
+        }
+
+        for (String valor : valoresHistoricos) {
+            for (Pqrs item : repo.findByAgenteAsignadoIgnoreCase(valor)) {
+                // Solo se usan coincidencias de texto para registros antiguos sin ID.
+                // Las PQRS nuevas siempre se resuelven por agenteAsignadoId.
+                boolean sinIdentificadorAsignado = item.getAgenteAsignadoId() == null
+                        || item.getAgenteAsignadoId().isBlank();
+                if (item.getId() != null && sinIdentificadorAsignado) {
+                    resultados.put(item.getId(), item);
+                }
+            }
+        }
+        return new ArrayList<>(resultados.values());
+    }
+
     //////////////////////////////////////////////////////
     // CAMBIAR ESTADO
     //////////////////////////////////////////////////////
@@ -545,11 +614,32 @@ public class PqrsController {
             Optional<Pqrs> pqrsOpt = repo.findById(id);
             if (pqrsOpt.isEmpty()) return ResponseEntity.status(404).body("PQRS no encontrada");
 
-            String agente = body.get("agente");
-            String responsable = body.get("responsable");
-
             Pqrs pqrs = pqrsOpt.get();
+            String agente = body.get("agente");
+            String agenteId = body.get("agenteId");
+
+            if (body.containsKey("agenteId")) {
+                if (agenteId == null || agenteId.trim().isEmpty()) {
+                    agente = null;
+                    agenteId = null;
+                } else {
+                    Usuario asignado = usuarioRepo.findById(agenteId.trim()).orElse(null);
+                    if (asignado == null
+                            || !"ADMIN".equalsIgnoreCase(asignado.getRole())
+                            || !"ACTIVO".equalsIgnoreCase(asignado.getEstado())) {
+                        return ResponseEntity.badRequest().body("El administrador seleccionado no existe o está inactivo.");
+                    }
+                    agenteId = asignado.getId();
+                    agente = nombreVisibleAdministrador(asignado);
+                }
+            } else if (agente == null || agente.trim().isEmpty()) {
+                agente = null;
+                agenteId = null;
+            }
+
+            String responsable = body.get("responsable");
             pqrs.setAgenteAsignado(agente);
+            pqrs.setAgenteAsignadoId(agenteId);
             repo.save(pqrs);
 
             HistorialPQRS historial = new HistorialPQRS();
@@ -559,10 +649,10 @@ public class PqrsController {
             historial.setEstadoNuevo(pqrs.getEstado());
             historial.setFecha(new Date());
             historial.setResponsable(responsable != null ? responsable : "ADMIN");
-            historial.setComentarioInterno("PQRS asignada a " + agente);
+            historial.setComentarioInterno("PQRS asignada a " + (agente == null ? "Sin asignar" : agente));
             historial.setMensajeCliente("Tu solicitud fue asignada a un agente.");
             historial.setVisibleCliente(true);
-            historial.setDetalle("Asignado a: " + agente);
+            historial.setDetalle("Asignado a: " + (agente == null ? "Sin asignar" : agente));
             historialRepo.save(historial);
 
             return ResponseEntity.ok(pqrs);
@@ -589,6 +679,7 @@ public class PqrsController {
             Pqrs pqrs = pqrsOpt.get();
             String estadoAnterior = pqrs.getEstado();
             String agenteAnterior = pqrs.getAgenteAsignado();
+            String agenteAnteriorId = pqrs.getAgenteAsignadoId();
 
             // El responsable se obtiene de la sesión autenticada y no del dato enviado por el navegador.
             Usuario administrador = obtenerUsuarioAutenticado();
@@ -617,20 +708,47 @@ public class PqrsController {
                     estadoNuevo == null ? null : estadoNuevo.trim().toUpperCase()
             );
 
-            // Si el campo agente viene vacío, se interpreta como retirar la asignación.
-            boolean agenteIncluido = body.containsKey("agente");
+            // El selector nuevo envía el ID del administrador. Se conserva
+            // compatibilidad con clientes anteriores que todavía envían "agente" como texto.
+            boolean agenteIdIncluido = body.containsKey("agenteId");
+            boolean agenteTextoIncluido = body.containsKey("agente");
+            String agenteNuevoId = agenteAnteriorId;
             String agenteNuevo = agenteAnterior;
-            if (agenteIncluido) {
+
+            if (agenteIdIncluido) {
+                String idSolicitado = body.get("agenteId");
+                if (idSolicitado == null || idSolicitado.trim().isEmpty()) {
+                    agenteNuevoId = null;
+                    agenteNuevo = null;
+                } else {
+                    Usuario asignado = usuarioRepo.findById(idSolicitado.trim()).orElse(null);
+                    if (asignado == null
+                            || !"ADMIN".equalsIgnoreCase(asignado.getRole())
+                            || (!"ACTIVO".equalsIgnoreCase(asignado.getEstado())
+                                && !Objects.equals(asignado.getId(), agenteAnteriorId))) {
+                        return ResponseEntity.badRequest().body("El administrador seleccionado no existe o está inactivo.");
+                    }
+                    agenteNuevoId = asignado.getId();
+                    agenteNuevo = nombreVisibleAdministrador(asignado);
+                }
+            } else if (agenteTextoIncluido) {
                 String agenteSolicitado = body.get("agente");
                 agenteNuevo = agenteSolicitado == null || agenteSolicitado.trim().isEmpty()
                         ? null
                         : agenteSolicitado.trim();
+                // Si el nombre cambia desde un cliente antiguo, no se asume una cuenta
+                // hasta que la selección se haga por ID.
+                if (!Objects.equals(
+                        agenteAnterior == null ? null : agenteAnterior.trim(),
+                        agenteNuevo == null ? null : agenteNuevo.trim())) {
+                    agenteNuevoId = null;
+                }
             }
 
-            boolean cambioAgente = !Objects.equals(
-                    agenteAnterior == null || agenteAnterior.trim().isEmpty() ? null : agenteAnterior.trim(),
-                    agenteNuevo == null || agenteNuevo.trim().isEmpty() ? null : agenteNuevo.trim()
-            );
+            boolean cambioAgente = !Objects.equals(agenteAnteriorId, agenteNuevoId)
+                    || !Objects.equals(
+                            agenteAnterior == null || agenteAnterior.trim().isEmpty() ? null : agenteAnterior.trim(),
+                            agenteNuevo == null || agenteNuevo.trim().isEmpty() ? null : agenteNuevo.trim());
 
             String comentarioInterno = body.get("comentario");
             comentarioInterno = comentarioInterno == null ? "" : comentarioInterno.trim();
@@ -652,6 +770,7 @@ public class PqrsController {
             }
             if (cambioAgente) {
                 pqrs.setAgenteAsignado(agenteNuevo);
+                pqrs.setAgenteAsignadoId(agenteNuevoId);
             }
 
             // La comunicación también se conserva en la lista de respuestas de la PQRS,

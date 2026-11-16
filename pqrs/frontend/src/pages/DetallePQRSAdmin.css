@@ -509,6 +509,10 @@
   line-height: 1.5;
 }
 
+.admin-detail-assignee-error {
+  color: #b42318 !important;
+}
+
 .admin-detail-accordion-hint {
   display: flex;
   align-items: flex-start;

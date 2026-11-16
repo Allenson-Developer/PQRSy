@@ -1,6 +1,7 @@
 package com.pqrs.pqrs.controller;
 
 import java.util.HashMap;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -323,6 +324,49 @@ public class UsuarioController {
                     .body(response);
         }
  }
+
+    //////////////////////////////////////////////////////
+    // ADMINISTRADORES ACTIVOS PARA EL SELECTOR DE RESPONSABLES
+    //////////////////////////////////////////////////////
+
+    @GetMapping("/admins-activos")
+    public ResponseEntity<?> listarAdministradoresActivos() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated()) {
+            return ResponseEntity.status(401).body("Debes iniciar sesión.");
+        }
+
+        Usuario solicitante = repo.findByUsername(auth.getName()).orElse(null);
+        if (solicitante == null || !"ADMIN".equalsIgnoreCase(solicitante.getRole())) {
+            return ResponseEntity.status(403).body("Solo administración puede consultar esta lista.");
+        }
+
+        List<Map<String, Object>> administradores = repo.findByRole("ADMIN").stream()
+                .filter(usuario -> "ACTIVO".equalsIgnoreCase(
+                        usuario.getEstado() == null ? "" : usuario.getEstado().trim()))
+                .sorted(Comparator.comparing(
+                        usuario -> nombreVisibleAdministrador(usuario),
+                        String.CASE_INSENSITIVE_ORDER))
+                .map(usuario -> {
+                    Map<String, Object> item = new HashMap<>();
+                    item.put("id", usuario.getId());
+                    item.put("nombre", usuario.getNombre());
+                    item.put("apellido", usuario.getApellido());
+                    item.put("username", usuario.getUsername());
+                    item.put("nombreVisible", nombreVisibleAdministrador(usuario));
+                    return item;
+                })
+                .toList();
+
+        return ResponseEntity.ok(administradores);
+    }
+
+    private String nombreVisibleAdministrador(Usuario usuario) {
+        String nombre = usuario.getNombre() == null ? "" : usuario.getNombre().trim();
+        String apellido = usuario.getApellido() == null ? "" : usuario.getApellido().trim();
+        String completo = (nombre + " " + apellido).trim();
+        return completo.isEmpty() ? usuario.getUsername() : completo;
+    }
 
     //////////////////////////////////////////////////////
     // GET ALL

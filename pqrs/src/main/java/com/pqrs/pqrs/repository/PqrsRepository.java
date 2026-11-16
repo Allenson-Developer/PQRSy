@@ -46,6 +46,14 @@ public interface PqrsRepository
             String agenteAsignado
     );
 
+    List<Pqrs> findByAgenteAsignadoId(
+            String agenteAsignadoId
+    );
+
+    List<Pqrs> findByAgenteAsignadoIgnoreCase(
+            String agenteAsignado
+    );
+
     //////////////////////////////////////////////////////
     // BUSCAR POR TIPO
     //////////////////////////////////////////////////////

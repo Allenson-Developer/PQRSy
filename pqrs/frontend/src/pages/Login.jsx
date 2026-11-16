@@ -4,6 +4,8 @@ import AppIcon from "../components/AppIcon";
 import { useFeedback } from "../components/FeedbackProvider";
 import "./Login.css";
 
+const API_URL = "https://hoodvoice-api.onrender.com";
+
 function Login({ close }) {
   const navigate = useNavigate();
   const { notify } = useFeedback();
@@ -31,7 +33,7 @@ function Login({ close }) {
 
     setEnviando(true);
     try {
-      const response = await fetch("https://hoodvoice-api.onrender.com/test/login", {
+      const response = await fetch(`${API_URL}/test/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username: username.trim(), password, documento: modo === "ADMIN" ? documento.trim() : null }),

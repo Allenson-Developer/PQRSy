@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import AppIcon from "../components/AppIcon";
 import { useFeedback } from "../components/FeedbackProvider";
 import "./adminDashboard.css";
+
+const API_URL = "https://hoodvoice-api.onrender.com";
 
 function AdminDashboard() {
   const navigate = useNavigate();
@@ -51,6 +53,7 @@ function AdminDashboard() {
       <main className="portal-main admin-main">
         {vista === "inicio" && <AdminInicio onNavigate={cambiarVista} usuario={usuario} />}
         {vista === "ver" && <AdminPQRS />}
+        {vista === "asignadas" && <AdminPQRS soloAsignadas />}
         {vista === "stats" && <AdminStats />}
       </main>
       <footer className="portal-footer"><span>HOODVOICE <b>CARTAGENA</b></span><span>Centro de gestión y atención de PQRS.</span></footer>
@@ -61,6 +64,7 @@ function AdminDashboard() {
 function AdminInicio({ onNavigate, usuario }) {
   const cards = [
     { view: "ver", title: "Todas las PQRS", text: "Consulta, filtra y revisa las solicitudes recibidas.", icon: "files", kind: "admin-card-requests", action: "Abrir bandeja" },
+    { view: "asignadas", title: "Mis PQRS asignadas", text: "Encuentra rápidamente las solicitudes que están bajo tu responsabilidad.", icon: "user", kind: "admin-card-assigned", action: "Ver mis asignaciones" },
     { view: "stats", title: "Estadísticas globales", text: "Conoce la distribución general de las solicitudes.", icon: "chart", kind: "admin-card-stats", action: "Ver estadísticas" },
   ];
   return (
@@ -117,7 +121,11 @@ function AdminInboxFilter({ id, ariaLabel, value, options, onChange }) {
       <button
         type="button"
         className={`admin-inbox-filter ${abierto ? "is-open" : ""}`}
-        onClick={() => setAbierto((actual) => !actual)}
+        onClick={() => {
+          const abrir = !abierto;
+          setAbierto(abrir);
+          if (abrir && !loading) onOpen?.();
+        }}
         aria-expanded={abierto}
         aria-haspopup="true"
         aria-controls={`${id}-menu`}
@@ -161,13 +169,142 @@ function AdminInboxFilter({ id, ariaLabel, value, options, onChange }) {
   );
 }
 
-function AdminPQRS() {
+
+function AdminAssigneePicker({ admins, value, onChange, loading, error, onRetry, onOpen }) {
+  const [abierto, setAbierto] = useState(false);
+  const [busqueda, setBusqueda] = useState("");
+  const pickerRef = useRef(null);
+  const seleccionado = admins.find((admin) => admin.id === value);
+  const administradoresFiltrados = admins.filter((admin) => {
+    const consulta = busqueda.trim().toLocaleLowerCase("es-CO");
+    const texto = `${admin.nombre || ""} ${admin.username || ""}`.toLocaleLowerCase("es-CO");
+    return !consulta || texto.includes(consulta);
+  });
+
+  useEffect(() => {
+    if (!abierto) return undefined;
+
+    const cerrarAlHacerClicFuera = (event) => {
+      if (!pickerRef.current?.contains(event.target)) setAbierto(false);
+    };
+    const cerrarConEscape = (event) => {
+      if (event.key === "Escape") setAbierto(false);
+    };
+
+    document.addEventListener("pointerdown", cerrarAlHacerClicFuera);
+    document.addEventListener("keydown", cerrarConEscape);
+    return () => {
+      document.removeEventListener("pointerdown", cerrarAlHacerClicFuera);
+      document.removeEventListener("keydown", cerrarConEscape);
+    };
+  }, [abierto]);
+
+  return (
+    <div className={`admin-assignee-picker ${abierto ? "is-open" : ""}`} ref={pickerRef}>
+      <button
+        type="button"
+        className={`admin-assignee-picker-trigger ${abierto ? "is-open" : ""}`}
+        onClick={() => setAbierto((actual) => !actual)}
+        aria-expanded={abierto}
+        aria-haspopup="listbox"
+        aria-label={`Ver solicitudes de: ${seleccionado?.nombre || "selecciona un administrador"}`}
+      >
+        <AppIcon name="user" size={18} />
+        <span className={seleccionado ? "is-selected" : "is-placeholder"}>
+          {loading ? "Cargando administradores..." : (seleccionado?.nombre || "Selecciona un administrador")}
+        </span>
+        <AppIcon name="chevronDown" size={17} className="admin-assignee-picker-chevron" />
+      </button>
+
+      {abierto && (
+        <div className="admin-assignee-picker-menu">
+          <label className="admin-assignee-picker-search">
+            <AppIcon name="search" size={16} />
+            <input
+              type="search"
+              value={busqueda}
+              onChange={(event) => setBusqueda(event.target.value)}
+              placeholder="Buscar por nombre o usuario..."
+              aria-label="Buscar administrador"
+              autoFocus
+            />
+          </label>
+
+          {loading ? (
+            <div className="admin-assignee-picker-message">Cargando administradores...</div>
+          ) : error ? (
+            <div className="admin-assignee-picker-message is-error">
+              <span>{error}</span>
+              <button type="button" onClick={onRetry}>Intentar de nuevo</button>
+            </div>
+          ) : administradoresFiltrados.length > 0 ? (
+            <div className="admin-assignee-picker-options" role="listbox" aria-label="Administradores activos">
+              {administradoresFiltrados.map((admin) => (
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={value === admin.id}
+                  key={admin.id}
+                  className={`admin-assignee-picker-option ${value === admin.id ? "is-selected" : ""}`}
+                  onClick={() => {
+                    onChange(admin.id);
+                    setAbierto(false);
+                    setBusqueda("");
+                  }}
+                >
+                  <span className="admin-assignee-picker-avatar" aria-hidden="true">
+                    {String(admin.nombre || admin.username || "A").trim().charAt(0).toUpperCase()}
+                  </span>
+                  <span className="admin-assignee-picker-option-copy">
+                    <strong>{admin.nombre || admin.username}</strong>
+                    {admin.username && <small>@{admin.username}</small>}
+                  </span>
+                  {value === admin.id && <span className="admin-assignee-picker-check" aria-hidden="true">✓</span>}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="admin-assignee-picker-message">
+              {admins.length ? "No encontramos administradores con esa búsqueda." : "No hay administradores activos para mostrar."}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AdminPQRS({ soloAsignadas = false }) {
+  const navigate = useNavigate();
+  const usuarioSesion = (() => {
+    try { return JSON.parse(localStorage.getItem("user") || "null"); }
+    catch { return null; }
+  })();
+  const claveAdminSeleccionado = `hoodvoice-admin-seleccionado-${usuarioSesion?.id || usuarioSesion?._id || usuarioSesion?.username || "sesion"}`;
+
   const [pqrs, setPqrs] = useState([]);
+  const [administradores, setAdministradores] = useState([]);
+  const [loadingAdministradores, setLoadingAdministradores] = useState(false);
+  const [errorAdministradores, setErrorAdministradores] = useState("");
+  const [adminSeleccionadoId, setAdminSeleccionadoId] = useState(() => {
+    try { return sessionStorage.getItem(claveAdminSeleccionado) || ""; }
+    catch { return ""; }
+  });
   const [filtro, setFiltro] = useState("");
   const [filtroTipo, setFiltroTipo] = useState("");
   const [busqueda, setBusqueda] = useState("");
   const [loading, setLoading] = useState(false);
   const [errorCarga, setErrorCarga] = useState("");
+
+  // Mantiene la selección cuando se abre una PQRS y se vuelve a la bandeja.
+  useEffect(() => {
+    try {
+      if (adminSeleccionadoId) sessionStorage.setItem(claveAdminSeleccionado, adminSeleccionadoId);
+      else sessionStorage.removeItem(claveAdminSeleccionado);
+    } catch (error) {
+      console.warn("No se pudo conservar el administrador seleccionado:", error);
+    }
+  }, [adminSeleccionadoId, claveAdminSeleccionado]);
 
   const opcionesTipo = [
     { value: "", label: "Todos los tipos" },
@@ -186,7 +323,48 @@ function AdminPQRS() {
     { value: "CERRADO", label: "Cerradas" },
   ];
 
-  const cargarPqrs = async () => {
+  const cargarAdministradores = useCallback(async () => {
+    if (!soloAsignadas) return;
+
+    try {
+      setLoadingAdministradores(true);
+      setErrorAdministradores("");
+      const token = localStorage.getItem("token");
+      if (!token) throw new Error("No se encontró el token de sesión. Inicia sesión nuevamente.");
+
+      const response = await fetch(`${API_URL}/test/admins-activos`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) {
+        const detalle = await response.text();
+        throw new Error(`HTTP ${response.status}${detalle ? `: ${detalle}` : ""}`);
+      }
+
+      const data = await response.json();
+      const lista = (Array.isArray(data) ? data : []).map((admin) => ({
+        id: admin.id || admin._id,
+        nombre: admin.nombreVisible || [admin.nombre, admin.apellido].filter(Boolean).join(" ").trim() || admin.username,
+        username: admin.username || "",
+      })).filter((admin) => admin.id);
+      setAdministradores(lista);
+      setAdminSeleccionadoId((actual) => actual && !lista.some((admin) => admin.id === actual) ? "" : actual);
+    } catch (error) {
+      console.error("Error cargando administradores activos:", error);
+      setErrorAdministradores(error.message || "No se pudieron cargar los administradores.");
+      setAdministradores([]);
+    } finally {
+      setLoadingAdministradores(false);
+    }
+  }, [soloAsignadas]);
+
+  const cargarPqrs = useCallback(async () => {
+    if (soloAsignadas && !adminSeleccionadoId) {
+      setPqrs([]);
+      setErrorCarga("");
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       setErrorCarga("");
@@ -196,9 +374,9 @@ function AdminPQRS() {
         throw new Error("No se encontró el token de sesión. Inicia sesión nuevamente.");
       }
 
-      const url = !filtro
-        ? "https://hoodvoice-api.onrender.com/pqrs/todas"
-        : `https://hoodvoice-api.onrender.com/pqrs/estado?estado=${encodeURIComponent(filtro)}`;
+      const url = soloAsignadas
+        ? `${API_URL}/pqrs/asignadas/${encodeURIComponent(adminSeleccionadoId)}`
+        : `${API_URL}/pqrs/todas`;
 
       const response = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` },
@@ -218,13 +396,15 @@ function AdminPQRS() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [soloAsignadas, adminSeleccionadoId]);
+
+  useEffect(() => {
+    if (soloAsignadas) cargarAdministradores();
+  }, [soloAsignadas, cargarAdministradores]);
 
   useEffect(() => {
     cargarPqrs();
-    // La consulta depende del filtro de estado, que ya se enviaba al backend.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtro]);
+  }, [cargarPqrs]);
 
   const normalizar = (valor) => String(valor || "")
     .normalize("NFD")
@@ -300,7 +480,8 @@ function AdminPQRS() {
     ].filter(Boolean).join(" ").toLocaleLowerCase("es-CO");
     const coincideTexto = !consulta || valoresBusqueda.includes(consulta);
     const coincideTipo = !filtroTipo || normalizar(item.tipo) === filtroTipo;
-    return coincideTexto && coincideTipo;
+    const coincideEstado = !filtro || normalizar(item.estado) === filtro;
+    return coincideTexto && coincideTipo && coincideEstado;
   });
 
   const limpiarFiltros = () => {
@@ -310,22 +491,50 @@ function AdminPQRS() {
   };
 
   const hayFiltrosActivos = Boolean(busqueda.trim() || filtroTipo || filtro);
+  const administradoresOrdenados = [...administradores].sort((a, b) =>
+    String(a.nombre || a.username || "").localeCompare(String(b.nombre || b.username || ""), "es", { sensitivity: "base" })
+  );
+  const administradorSeleccionado = administradores.find((admin) => admin.id === adminSeleccionadoId);
 
   return (
     <section className="admin-pqrs-inbox">
       <header className="admin-inbox-heading">
         <div>
-          <span className="admin-inbox-eyebrow">GESTIÓN Y SEGUIMIENTO</span>
-          <h1>Todas las PQRS</h1>
-          <p>Consulta, filtra y gestiona las solicitudes ciudadanas desde un solo lugar.</p>
+          <span className="admin-inbox-eyebrow">{soloAsignadas ? "BANDEJA COMPARTIDA POR RESPONSABLE" : "GESTIÓN Y SEGUIMIENTO"}</span>
+          <h1>{soloAsignadas ? "Mis PQRS asignadas" : "Todas las PQRS"}</h1>
+          <p>{soloAsignadas ? "Selecciona un administrador para consultar las solicitudes que tiene a su cargo." : "Consulta, filtra y gestiona las solicitudes ciudadanas desde un solo lugar."}</p>
         </div>
-        {!loading && !errorCarga && (
+        {!loading && !errorCarga && (!soloAsignadas || adminSeleccionadoId) && (
           <div className="admin-inbox-total" aria-live="polite">
-            <strong>{pqrsFiltradas.length}</strong>
-            <span>{pqrsFiltradas.length === 1 ? "solicitud" : "solicitudes"}</span>
+            <strong>{soloAsignadas ? pqrs.length : pqrsFiltradas.length}</strong>
+            <span>{soloAsignadas ? "PQRS asignadas" : (pqrsFiltradas.length === 1 ? "solicitud" : "solicitudes")}</span>
           </div>
         )}
       </header>
+
+      {soloAsignadas && (
+        <div className="admin-assigned-selector-row">
+          <label className="admin-assigned-selector-label">VER SOLICITUDES DE</label>
+          <AdminAssigneePicker
+            admins={administradoresOrdenados}
+            value={adminSeleccionadoId}
+            onChange={setAdminSeleccionadoId}
+            loading={loadingAdministradores}
+            error={errorAdministradores}
+            onRetry={cargarAdministradores}
+            onOpen={cargarAdministradores}
+          />
+        </div>
+      )}
+
+      {soloAsignadas && errorAdministradores && (
+        <div className="admin-inbox-state admin-inbox-state-error" role="alert">
+          <AppIcon name="alert" size={26} />
+          <strong>No se pudieron cargar los administradores</strong>
+          <p>{errorAdministradores}</p>
+          <button type="button" className="admin-inbox-clear" onClick={cargarAdministradores}>Intentar de nuevo</button>
+        </div>
+      )}
 
       <div className="admin-inbox-toolbar">
         <label className="admin-inbox-search">
@@ -361,8 +570,10 @@ function AdminPQRS() {
       </div>
 
       <div className="admin-inbox-list-label">
-        <span>{loading ? "Consultando solicitudes..." : "Bandeja de solicitudes"}</span>
-        {!loading && !errorCarga && (
+        <span>{loading ? "Consultando solicitudes..." : (soloAsignadas
+          ? (administradorSeleccionado ? `Solicitudes asignadas a ${administradorSeleccionado.nombre || administradorSeleccionado.username}` : "Selecciona un administrador para consultar su bandeja")
+          : "Bandeja general de solicitudes")}</span>
+        {!loading && !errorCarga && (!soloAsignadas || adminSeleccionadoId) && (
           <span>{pqrsFiltradas.length} de {pqrs.length} visibles</span>
         )}
       </div>
@@ -384,11 +595,19 @@ function AdminPQRS() {
         </div>
       )}
 
-      {!loading && !errorCarga && pqrs.length === 0 && (
+      {!loading && !errorCarga && soloAsignadas && !adminSeleccionadoId && !errorAdministradores && (
+        <div className="admin-inbox-state">
+          <AppIcon name="user" size={30} />
+          <strong>{loadingAdministradores ? "Cargando administradores" : (administradores.length ? "Selecciona un administrador" : "No hay administradores activos disponibles")}</strong>
+          <p>{administradores.length ? "Busca tu nombre o el del trabajador que deseas consultar. Aquí aparecerán únicamente sus PQRS asignadas." : "Verifica que existan cuentas administrativas activas para consultar sus solicitudes."}</p>
+        </div>
+      )}
+
+      {!loading && !errorCarga && pqrs.length === 0 && (!soloAsignadas || adminSeleccionadoId) && (
         <div className="admin-inbox-state">
           <AppIcon name="files" size={30} />
-          <strong>No hay PQRS para mostrar</strong>
-          <p>Cuando se registren solicitudes, aparecerán aquí para que puedas gestionarlas.</p>
+          <strong>{soloAsignadas ? `${administradorSeleccionado?.nombre || "Este administrador"} no tiene PQRS asignadas` : "No hay PQRS para mostrar"}</strong>
+          <p>{soloAsignadas ? "Cuando se le asigne una solicitud, aparecerá aquí." : "Cuando se registren solicitudes, aparecerán aquí para que puedas gestionarlas."}</p>
         </div>
       )}
 
@@ -396,7 +615,7 @@ function AdminPQRS() {
         <div className="admin-inbox-state">
           <AppIcon name="search" size={30} />
           <strong>No encontramos coincidencias</strong>
-          <p>Prueba con otro texto o limpia los filtros para ver todas las solicitudes.</p>
+          <p>Prueba con otro texto o limpia los filtros para ver {soloAsignadas ? "las solicitudes de este administrador" : "todas las solicitudes"}.</p>
           <button type="button" className="admin-inbox-clear" onClick={limpiarFiltros}>Limpiar filtros</button>
         </div>
       )}
@@ -450,7 +669,9 @@ function AdminPQRS() {
                     type="button"
                     className="admin-inbox-manage-btn"
                     disabled={!requestId}
-                    onClick={() => { window.location.href = `/detalle-admin/${encodeURIComponent(requestId)}`; }}
+                    onClick={() => navigate(`/detalle-admin/${encodeURIComponent(requestId)}`, {
+                      state: { adminDashboardView: soloAsignadas ? "asignadas" : "ver" },
+                    })}
                   >
                     Gestionar trámite <AppIcon name="chevronRight" size={17} />
                   </button>
@@ -484,7 +705,7 @@ function AdminStats() {
       setLoading(false);
       return () => { activo = false; };
     }
-    fetch("https://hoodvoice-api.onrender.com/pqrs/estadisticas-global", {
+    fetch(`${API_URL}/pqrs/estadisticas-global`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then(async (res) => {

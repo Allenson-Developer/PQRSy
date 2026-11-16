@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import AppIcon from "../components/AppIcon";
 import { useFeedback } from "../components/FeedbackProvider";
 import "../styles/portal.css";
@@ -86,6 +86,26 @@ function obtenerIconoAccion(accion) {
   return iconos[accion] || "clock";
 }
 
+function normalizarAsignacion(valor) {
+  return String(valor || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLocaleLowerCase("es-CO");
+}
+
+function buscarAdministradorPorNombre(asignacion, administradores) {
+  const valor = normalizarAsignacion(asignacion);
+  if (!valor) return null;
+  return administradores.find((admin) => [
+    admin.nombreVisible,
+    admin.nombre,
+    admin.username,
+    `${admin.nombre || ""} ${admin.apellido || ""}`.trim(),
+  ].some((opcion) => normalizarAsignacion(opcion) === valor)) || null;
+}
+
 function AdminDetailAccordion({ id, title, description, icon, open, onToggle, badge, children }) {
   return (
     <section className={`admin-detail-accordion ${open ? "is-open" : ""}`}>
@@ -120,8 +140,14 @@ function DetallePQRSAdmin() {
   const { notify } = useFeedback();
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const vistaAnterior = location.state?.adminDashboardView === "asignadas" ? "asignadas" : "ver";
+  const volverABandeja = () => navigate("/admin", { state: { adminDashboardView: vistaAnterior } });
 
   const [pqrs, setPqrs] = useState(null);
+  const [administradores, setAdministradores] = useState([]);
+  const [cargandoAdministradores, setCargandoAdministradores] = useState(false);
+  const [errorAdministradores, setErrorAdministradores] = useState("");
   const [historial, setHistorial] = useState([]);
   const [loading, setLoading] = useState(true);
   const [guardando, setGuardando] = useState(false);
@@ -232,7 +258,7 @@ function DetallePQRSAdmin() {
       const dataPqrs = await responsePqrs.json();
       setPqrs(dataPqrs);
       setNuevoEstado(dataPqrs.estado || "PENDIENTE");
-      setAgente(dataPqrs.agenteAsignado || "");
+      setAgente(dataPqrs.agenteAsignadoId || "");
 
       // Se conserva la ruta actual del historial para revisar luego el endpoint y los permisos.
       const responseHistorial = await fetch(`${API_URL}/historial/admin/pqrs/${id}`, {
@@ -258,24 +284,70 @@ function DetallePQRSAdmin() {
     }
   }, [id]);
 
+  const cargarAdministradores = useCallback(async () => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      setErrorAdministradores("No se encontró una sesión administrativa.");
+      return;
+    }
+
+    setCargandoAdministradores(true);
+    setErrorAdministradores("");
+    try {
+      const response = await fetch(`${API_URL}/test/admins-activos`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) {
+        const detalle = await leerDetalleError(response);
+        throw new Error(detalle);
+      }
+      const data = await response.json();
+      setAdministradores(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error("Error cargando administradores activos:", error);
+      setErrorAdministradores(error.message || "No se pudo cargar la lista de administradores.");
+      setAdministradores([]);
+    } finally {
+      setCargandoAdministradores(false);
+    }
+  }, []);
+
   useEffect(() => {
     cargarDetalle();
-  }, [cargarDetalle]);
+    cargarAdministradores();
+  }, [cargarDetalle, cargarAdministradores]);
+
+  // Resuelve las asignaciones antiguas que solo guardaban el nombre o username.
+  // Si no hay una coincidencia segura, se conserva como valor histórico sin asignarla a otra cuenta.
+  useEffect(() => {
+    if (!pqrs) return;
+    if (pqrs.agenteAsignadoId) {
+      setAgente(pqrs.agenteAsignadoId);
+      return;
+    }
+    if (!pqrs.agenteAsignado) {
+      setAgente("");
+      return;
+    }
+    const administradorAntiguo = buscarAdministradorPorNombre(pqrs.agenteAsignado, administradores);
+    setAgente(administradorAntiguo?.id || "__legacy__");
+  }, [pqrs?.id, pqrs?.agenteAsignadoId, pqrs?.agenteAsignado, administradores]);
 
   const guardarGestionCompleta = async () => {
     if (!pqrs) return;
 
-    const agenteOriginal = (pqrs.agenteAsignado || "").trim();
-    const agenteNuevo = agente.trim();
+    const agenteOriginalId = pqrs.agenteAsignadoId || (pqrs.agenteAsignado ? "__legacy__" : "");
+    const agenteNuevoId = agente;
     const estadoOriginal = String(pqrs.estado || "").trim().toUpperCase();
     const estadoSeleccionado = String(nuevoEstado || "").trim().toUpperCase();
     const mensaje = mensajeCiudadano.trim();
     const nota = notaInterna.trim();
+    const cambioAgente = agenteNuevoId !== agenteOriginalId;
 
     const hayCambios =
       nota.length > 0 ||
       mensaje.length > 0 ||
-      agenteNuevo !== agenteOriginal ||
+      cambioAgente ||
       estadoSeleccionado !== estadoOriginal;
 
     if (!hayCambios) {
@@ -303,7 +375,7 @@ function DetallePQRSAdmin() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          agente: agenteNuevo,
+          ...(agenteNuevoId !== "__legacy__" ? { agenteId: agenteNuevoId } : {}),
           estado: estadoSeleccionado,
           comentario: nota,
           mensajeCliente: mensaje,
@@ -342,7 +414,7 @@ function DetallePQRSAdmin() {
   if (!pqrs) {
     return (
       <main className="admin-detalle-container admin-detail-page">
-        <button className="admin-detail-back-btn" type="button" onClick={() => navigate("/admin")}>
+        <button className="admin-detail-back-btn" type="button" onClick={volverABandeja}>
           <AppIcon name="arrowLeft" size={16} /> Volver al panel
         </button>
         <section className="admin-detail-state admin-detail-state-error" role="alert">
@@ -353,7 +425,7 @@ function DetallePQRSAdmin() {
             <button type="button" className="admin-detail-secondary-btn" onClick={cargarDetalle}>
               Reintentar
             </button>
-            <button type="button" className="admin-detail-primary-btn" onClick={() => navigate("/admin")}>
+            <button type="button" className="admin-detail-primary-btn" onClick={volverABandeja}>
               Volver al panel
             </button>
           </div>
@@ -368,8 +440,8 @@ function DetallePQRSAdmin() {
   return (
     <main className="admin-detalle-container admin-detail-page">
       <header className="admin-detail-topbar">
-        <button className="admin-detail-back-btn" type="button" onClick={() => navigate("/admin")}>
-          <AppIcon name="arrowLeft" size={16} /> Volver a todas las PQRS
+        <button className="admin-detail-back-btn" type="button" onClick={volverABandeja}>
+          <AppIcon name="arrowLeft" size={16} /> Volver a la bandeja
         </button>
       </header>
 
@@ -469,15 +541,40 @@ function DetallePQRSAdmin() {
                 onToggle={() => alternarSeccion("responsable")}
               >
                 <label className="admin-detail-field">
-                  <span>Agente responsable</span>
-                  <input
-                    type="text"
+                  <span>Administrador responsable</span>
+                  <select
                     value={agente}
                     onChange={(event) => setAgente(event.target.value)}
-                    placeholder="Nombre o usuario del administrador"
-                    autoComplete="off"
-                  />
+                    disabled={cargandoAdministradores || Boolean(errorAdministradores) || guardando}
+                  >
+                    <option value="">Sin asignar</option>
+                    {agente === "__legacy__" && (
+                      <option value="__legacy__" disabled>Asignación anterior: {pqrs.agenteAsignado}</option>
+                    )}
+                    {pqrs.agenteAsignadoId && !administradores.some((admin) => admin.id === pqrs.agenteAsignadoId) && (
+                      <option value={pqrs.agenteAsignadoId}>{pqrs.agenteAsignado || "Administrador asignado"} · cuenta no activa</option>
+                    )}
+                    {administradores.map((admin) => (
+                      <option key={admin.id} value={admin.id}>
+                        {admin.nombreVisible || `${admin.nombre || ""} ${admin.apellido || ""}`.trim() || admin.username} · @{admin.username}
+                      </option>
+                    ))}
+                  </select>
+                  {cargandoAdministradores && <small>Cargando administradores activos...</small>}
+                  {errorAdministradores && <small className="admin-detail-assignee-error">{errorAdministradores}</small>}
                 </label>
+                {agente === "__legacy__" && (
+                  <p className="admin-detail-accordion-hint">
+                    <AppIcon name="info" size={15} />
+                    Esta asignación antigua está guardada como texto. Selecciona una cuenta para vincularla; mientras no lo hagas, se conservará sin cambios.
+                  </p>
+                )}
+                {!errorAdministradores && !cargandoAdministradores && administradores.length === 0 && (
+                  <p className="admin-detail-accordion-hint">
+                    <AppIcon name="info" size={15} />
+                    No hay otras cuentas ADMIN activas disponibles para asignar.
+                  </p>
+                )}
                 <p className="admin-detail-accordion-hint">
                   <AppIcon name="info" size={15} />
                   Al guardar la gestión, el cambio de responsable quedará registrado en el historial.

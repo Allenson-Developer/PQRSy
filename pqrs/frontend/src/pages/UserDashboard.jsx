@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import Navbar from "../components/Navbar";
 import AppIcon from "../components/AppIcon";
 import { useFeedback } from "../components/FeedbackProvider";
-import DetallePQRS from "./DetallePQRS";
+import Navbar from "../components/Navbar";
 import "../styles/portal.css";
+import DetallePQRS from "./DetallePQRS";
 import "./UserDashboard.css";
 
 const API_URL = "https://hoodvoice-api.onrender.com";

@@ -63,6 +63,11 @@ public class SecurityConfig {
                                 "/test/actualizar/**"
                         ).authenticated()
 
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/test/admins-activos"
+                        ).hasRole("ADMIN")
+
                         // ==============================
                         // RUTAS ADMIN
                         // ==============================
@@ -73,6 +78,8 @@ public class SecurityConfig {
                        .requestMatchers(
                         HttpMethod.GET,
                           "/pqrs/todas",
+                        "/pqrs/asignadas",
+                        "/pqrs/asignadas/*",
                         "/pqrs/estadisticas-global",
                         "/pqrs/dashboard",
                         "/pqrs/prioridad/*",

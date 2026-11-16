@@ -21,6 +21,7 @@ export default function Navbar({ role = "USER", user, activeView, onNavigate, on
   const items = useMemo(() => isAdmin ? [
     { view: "inicio", label: "Inicio", icon: "home", description: "Vista general del centro de gestión" },
     { view: "ver", label: "Todas las PQRS", icon: "files", description: "Consultar y gestionar solicitudes" },
+    { view: "asignadas", label: "Mis PQRS asignadas", icon: "user", description: "Solicitudes bajo tu responsabilidad" },
     { view: "stats", label: "Estadísticas globales", icon: "chart", description: "Indicadores generales del sistema" },
   ] : [
     { view: "inicio", label: "Inicio", icon: "home", description: "Accesos rápidos a tus funciones" },
