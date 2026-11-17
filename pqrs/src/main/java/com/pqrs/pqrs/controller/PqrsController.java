@@ -39,6 +39,7 @@ import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3Configuration;
+import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
@@ -123,6 +124,8 @@ public class PqrsController {
                             .credentialsProvider(StaticCredentialsProvider.create(credentials))
                             .region(Region.of("auto"))
                             .serviceConfiguration(serviceConfiguration)
+                            // Cliente HTTP de Java: evita el Apache5 que falta en el runtime de Render.
+                            .httpClientBuilder(UrlConnectionHttpClient.builder())
                             .build();
                 }
             }
