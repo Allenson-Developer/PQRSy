@@ -83,11 +83,18 @@ public class Pqrs {
     private String agenteAsignadoId;
 
     //////////////////////////////////////////////////////
-    // RESPUESTAS CHAT
+    // RESPUESTAS / COMUNICACIONES REGISTRADAS
     //////////////////////////////////////////////////////
 
     private List<Respuesta> respuestas =
             new ArrayList<>();
+
+    //////////////////////////////////////////////////////
+    // CONVERSACIÓN CIUDADANO - ADMINISTRACIÓN
+    //////////////////////////////////////////////////////
+
+    // Este chat es independiente de las respuestas oficiales y del historial.
+    private List<MensajeConversacion> conversacion = new ArrayList<>();
 
     //////////////////////////////////////////////////////
     // RESPUESTA CERRADA ADMIN
@@ -274,6 +281,15 @@ public class Pqrs {
     public void setRespuestas(List<Respuesta> respuestas) {
 
         this.respuestas = respuestas;
+    }
+
+
+    public List<MensajeConversacion> getConversacion() {
+        return conversacion;
+    }
+
+    public void setConversacion(List<MensajeConversacion> conversacion) {
+        this.conversacion = conversacion;
     }
 
     //////////////////////////////////////////////////////

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import AppIcon from "../components/AppIcon";
+import ConversacionPQRS from "../components/ConversacionPQRS";
 import { useFeedback } from "../components/FeedbackProvider";
 import "../styles/portal.css";
 import "./DetallePQRSAdmin.css";
@@ -627,6 +628,17 @@ function DetallePQRSAdmin() {
                 <p className="admin-detail-message-disabled is-available">
                   Esta comunicación se guardará junto con el estado, el agente y la nota interna en un solo movimiento.
                 </p>
+              </AdminDetailAccordion>
+
+              <AdminDetailAccordion
+                id="conversacion"
+                title="Conversación con el ciudadano"
+                description="Mensajes directos sobre esta solicitud, separados de las respuestas oficiales."
+                icon="mail"
+                open={seccionAbierta === "conversacion"}
+                onToggle={() => alternarSeccion("conversacion")}
+              >
+                <ConversacionPQRS pqrsId={id} rol="ADMIN" />
               </AdminDetailAccordion>
 
               <AdminDetailAccordion

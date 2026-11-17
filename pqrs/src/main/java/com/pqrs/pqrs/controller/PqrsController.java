@@ -49,8 +49,10 @@ import software.amazon.awssdk.core.ResponseBytes;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
 
 import com.pqrs.pqrs.model.HistorialPQRS;
+import com.pqrs.pqrs.model.MensajeConversacion;
 import com.pqrs.pqrs.model.Pqrs;
 import com.pqrs.pqrs.model.Respuesta;
 import com.pqrs.pqrs.model.Usuario;
@@ -1094,6 +1096,92 @@ public class PqrsController {
     }
 
     return ResponseEntity.ok(pqrs);
+   }
+
+   //////////////////////////////////////////////////////
+   // CONVERSACIÓN ENTRE CIUDADANO Y ADMINISTRACIÓN
+   //////////////////////////////////////////////////////
+
+   @GetMapping("/{id}/conversacion")
+   public ResponseEntity<?> obtenerConversacion(@PathVariable String id) {
+       Optional<Pqrs> pqrsOpt = repo.findById(id);
+       if (pqrsOpt.isEmpty()) {
+           return ResponseEntity.status(404).body("PQRS no encontrada");
+       }
+
+       Pqrs pqrs = pqrsOpt.get();
+       Usuario usuarioAutenticado = obtenerUsuarioAutenticado();
+       if (usuarioAutenticado == null) {
+           return ResponseEntity.status(401).body("Debes iniciar sesión para consultar esta conversación.");
+       }
+
+       boolean esPropietario = usuarioAutenticado.getId() != null
+               && usuarioAutenticado.getId().equals(pqrs.getUsuarioId());
+       boolean esAdministrador = "ADMIN".equalsIgnoreCase(usuarioAutenticado.getRole());
+       if (!esAdministrador && !esPropietario) {
+           return ResponseEntity.status(403).body("No tienes permiso para consultar esta conversación.");
+       }
+
+       List<MensajeConversacion> mensajes = pqrs.getConversacion();
+       return ResponseEntity.ok(mensajes != null ? mensajes : new ArrayList<>());
+   }
+
+   @PostMapping("/{id}/conversacion")
+   public ResponseEntity<?> enviarMensajeConversacion(
+           @PathVariable String id,
+           @RequestBody Map<String, String> body) {
+       Optional<Pqrs> pqrsOpt = repo.findById(id);
+       if (pqrsOpt.isEmpty()) {
+           return ResponseEntity.status(404).body("PQRS no encontrada");
+       }
+
+       Pqrs pqrs = pqrsOpt.get();
+       Usuario usuarioAutenticado = obtenerUsuarioAutenticado();
+       if (usuarioAutenticado == null) {
+           return ResponseEntity.status(401).body("Debes iniciar sesión para enviar un mensaje.");
+       }
+
+       boolean esPropietario = usuarioAutenticado.getId() != null
+               && usuarioAutenticado.getId().equals(pqrs.getUsuarioId());
+       boolean esAdministrador = "ADMIN".equalsIgnoreCase(usuarioAutenticado.getRole());
+       if (!esAdministrador && !esPropietario) {
+           return ResponseEntity.status(403).body("No tienes permiso para escribir en esta conversación.");
+       }
+
+       String texto = body == null ? null : body.get("mensaje");
+       if (texto == null || texto.trim().isEmpty()) {
+           return ResponseEntity.badRequest().body("Escribe un mensaje antes de enviarlo.");
+       }
+       texto = texto.trim();
+       if (texto.length() > 4000) {
+           return ResponseEntity.badRequest().body("El mensaje no puede superar los 4000 caracteres.");
+       }
+
+       String nombre = usuarioAutenticado.getNombre() == null ? "" : usuarioAutenticado.getNombre().trim();
+       String apellido = usuarioAutenticado.getApellido() == null ? "" : usuarioAutenticado.getApellido().trim();
+       String nombreAutor = (nombre + " " + apellido).trim();
+       if (nombreAutor.isEmpty()) {
+           nombreAutor = usuarioAutenticado.getUsername();
+       }
+
+       MensajeConversacion nuevo = new MensajeConversacion();
+       nuevo.setMensaje(texto);
+       nuevo.setAutor(nombreAutor != null ? nombreAutor : "Usuario");
+       nuevo.setRol(usuarioAutenticado.getRole());
+       nuevo.setFecha(new Date());
+
+       // $push evita que dos mensajes enviados casi al mismo tiempo se sobrescriban.
+       mongoTemplate.updateFirst(
+               Query.query(Criteria.where("_id").is(id)),
+               new Update().push("conversacion", nuevo),
+               Pqrs.class);
+
+       Pqrs actualizada = repo.findById(id).orElse(null);
+       if (actualizada == null) {
+           return ResponseEntity.status(404).body("PQRS no encontrada");
+       }
+       List<MensajeConversacion> mensajes = actualizada.getConversacion();
+       return ResponseEntity.ok(mensajes != null ? mensajes : new ArrayList<>());
    }
 
    //////////////////////////////////////////////////////

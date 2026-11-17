@@ -153,7 +153,13 @@ public class SecurityConfig {
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/pqrs/detalle/**",
-                                "/pqrs/archivo/**"
+                                "/pqrs/archivo/**",
+                                "/pqrs/*/conversacion"
+                        ).authenticated()
+
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/pqrs/*/conversacion"
                         ).authenticated()
 
                         /*

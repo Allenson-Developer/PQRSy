@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useFeedback } from "../components/FeedbackProvider";
+import ConversacionPQRS from "../components/ConversacionPQRS";
 import "../styles/portal.css";
 import "./UserDashboard.css";
 
@@ -300,8 +301,8 @@ function DetallePQRS({ pqrs: pqrsInicial = null, volver }) {
           <div className="detalle-v2-panel-heading detalle-v2-history-heading">
             <span className="detalle-v2-panel-icon" aria-hidden="true">▱</span>
             <div>
-              <h2>Historial de movimientos</h2>
-              <p>Registro cronológico de las acciones y respuestas de tu solicitud.</p>
+              <h2>Gestión del trámite</h2>
+              <p>Consulta los movimientos y comunícate con el administrador de tu solicitud.</p>
             </div>
             <span className="detalle-v2-count">{historial.length} {historial.length === 1 ? "movimiento" : "movimientos"}</span>
           </div>
@@ -354,6 +355,8 @@ function DetallePQRS({ pqrs: pqrsInicial = null, volver }) {
               ))}
             </div>
           )}
+
+          <ConversacionPQRS pqrsId={id} rol="USER" />
         </section>
       </div>
     </div>
