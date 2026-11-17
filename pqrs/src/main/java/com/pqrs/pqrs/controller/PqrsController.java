@@ -1,7 +1,7 @@
 package com.pqrs.pqrs.controller;
 
-import java.io.File;
 import java.io.IOException;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -13,6 +13,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Objects;
+import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -30,6 +31,23 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+
+import jakarta.annotation.PreDestroy;
+import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.core.exception.SdkException;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.S3Configuration;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectResponse;
+import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.S3Exception;
+import software.amazon.awssdk.core.ResponseBytes;
+
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
 
 import com.pqrs.pqrs.model.HistorialPQRS;
 import com.pqrs.pqrs.model.Pqrs;
@@ -52,8 +70,73 @@ public class PqrsController {
     @Autowired
     private HistorialPQRSRepository historialRepo;
 
+    @Autowired
+    private MongoTemplate mongoTemplate;
+
+    // R2 es opcional en desarrollo local. En Render se activa mediante R2_ENABLED=true.
+    @Value("${app.r2.enabled:false}")
+    private boolean r2Enabled;
+
+    @Value("${app.r2.endpoint:}")
+    private String r2Endpoint;
+
+    @Value("${app.r2.bucket:hoodvoice-adjuntos}")
+    private String r2Bucket;
+
+    @Value("${app.r2.access-key-id:}")
+    private String r2AccessKeyId;
+
+    @Value("${app.r2.secret-access-key:}")
+    private String r2SecretAccessKey;
+
     @Value("${app.upload-dir:uploads}")
     private String uploadDir;
+
+    private volatile S3Client r2Client;
+
+    private S3Client obtenerClienteR2() {
+        if (!r2Enabled) {
+            return null;
+        }
+
+        if (r2Client == null) {
+            synchronized (this) {
+                if (r2Client == null) {
+                    if (r2Endpoint == null || r2Endpoint.isBlank()
+                            || r2Bucket == null || r2Bucket.isBlank()
+                            || r2AccessKeyId == null || r2AccessKeyId.isBlank()
+                            || r2SecretAccessKey == null || r2SecretAccessKey.isBlank()) {
+                        throw new IllegalStateException(
+                                "Faltan variables de entorno para conectar Cloudflare R2.");
+                    }
+
+                    AwsBasicCredentials credentials = AwsBasicCredentials.create(
+                            r2AccessKeyId.trim(), r2SecretAccessKey.trim());
+
+                    S3Configuration serviceConfiguration = S3Configuration.builder()
+                            .pathStyleAccessEnabled(true)
+                            .chunkedEncodingEnabled(false)
+                            .build();
+
+                    r2Client = S3Client.builder()
+                            .endpointOverride(URI.create(r2Endpoint.trim()))
+                            .credentialsProvider(StaticCredentialsProvider.create(credentials))
+                            .region(Region.of("auto"))
+                            .serviceConfiguration(serviceConfiguration)
+                            .build();
+                }
+            }
+        }
+
+        return r2Client;
+    }
+
+    @PreDestroy
+    public void cerrarClienteR2() {
+        if (r2Client != null) {
+            r2Client.close();
+        }
+    }
 
   //////////////////////////////////////////////////////
   // SEGURIDAD - USUARIO AUTENTICADO
@@ -138,12 +221,34 @@ public class PqrsController {
             pqrs.setPrioridad("MEDIA");
 
             if (archivo != null && !archivo.isEmpty()) {
-                Path directorio = Paths.get(uploadDir).toAbsolutePath().normalize();
-                Files.createDirectories(directorio);
+                byte[] contenidoArchivo = archivo.getBytes();
+                String nombreOriginalSeguro = sanitizarNombreArchivo(archivo.getOriginalFilename());
+                String nombreArchivo = System.currentTimeMillis() + "_"
+                        + UUID.randomUUID() + "_" + nombreOriginalSeguro;
+                String tipoContenido = obtenerTipoContenido(nombreArchivo, contenidoArchivo,
+                        archivo.getContentType());
 
-                String nombreArchivo = System.currentTimeMillis() + "_" + archivo.getOriginalFilename();
-                Path ruta = directorio.resolve(nombreArchivo).normalize();
-                Files.write(ruta, archivo.getBytes());
+                if (r2Enabled) {
+                    S3Client cliente = obtenerClienteR2();
+                    PutObjectRequest solicitud = PutObjectRequest.builder()
+                            .bucket(r2Bucket)
+                            .key(nombreArchivo)
+                            .contentType(tipoContenido)
+                            .contentLength((long) contenidoArchivo.length)
+                            .build();
+                    cliente.putObject(solicitud, software.amazon.awssdk.core.sync.RequestBody.fromBytes(contenidoArchivo));
+                } else {
+                    // Conserva el almacenamiento local para desarrollo en el computador.
+                    Path directorio = Paths.get(uploadDir).toAbsolutePath().normalize();
+                    Files.createDirectories(directorio);
+                    Path ruta = directorio.resolve(nombreArchivo).normalize();
+                    if (!ruta.startsWith(directorio)) {
+                        return ResponseEntity.badRequest().body("Nombre de archivo no válido.");
+                    }
+                    Files.write(ruta, contenidoArchivo);
+                }
+
+                // MongoDB guarda la clave del objeto, no una URL pública.
                 pqrs.setArchivo(nombreArchivo);
             }
 
@@ -168,10 +273,19 @@ public class PqrsController {
 
             return ResponseEntity.ok(pqrsGuardada);
 
+        } catch (SdkException e) {
+            System.err.println("Error al guardar el adjunto en Cloudflare R2: " + e.getClass().getSimpleName());
+            Map<String, Object> response = new HashMap<>();
+            response.put("mensaje", "No se pudo guardar el documento adjunto en el almacenamiento externo.");
+            return ResponseEntity.status(502).body(response);
         } catch (IOException e) {
             Map<String, Object> response = new HashMap<>();
-            response.put("mensaje", "Error al subir archivo");
-            response.put("error", e.getMessage());
+            response.put("mensaje", "Error al guardar el archivo adjunto.");
+            return ResponseEntity.status(500).body(response);
+        } catch (Exception e) {
+            System.err.println("Error creando PQRS: " + e.getClass().getSimpleName());
+            Map<String, Object> response = new HashMap<>();
+            response.put("mensaje", "No se pudo crear la PQRS.");
             return ResponseEntity.status(500).body(response);
         }
     }
@@ -984,71 +1098,118 @@ public class PqrsController {
 //////////////////////////////////////////////////////
 
 @GetMapping("/archivo/{nombre}")
-public ResponseEntity<?> descargarArchivo(
-        @PathVariable String nombre) {
-
+public ResponseEntity<?> descargarArchivo(@PathVariable String nombre) {
     try {
-        Path carpetaUploads = Paths.get(uploadDir)
-                .toAbsolutePath()
-                .normalize();
-
-        Path ruta = carpetaUploads
-                .resolve(nombre)
-                .normalize();
-
-        // Evitar que la ruta salga de la carpeta uploads
-        if (!ruta.startsWith(carpetaUploads)) {
-            return ResponseEntity.badRequest()
-                    .body("Ruta de archivo no válida");
+        if (nombre == null || nombre.isBlank()
+                || nombre.contains("/") || nombre.contains("\\")
+                || nombre.equals(".") || nombre.equals("..")) {
+            return ResponseEntity.badRequest().body("Nombre de archivo no válido.");
         }
 
-        if (!Files.isRegularFile(ruta)) {
+        // El objeto sigue siendo privado en R2. Solo puede descargarlo un ADMIN
+        // o el ciudadano propietario de la PQRS que referencia ese archivo.
+        Pqrs pqrsAdjunto = mongoTemplate.findOne(
+                Query.query(Criteria.where("archivo").is(nombre)), Pqrs.class);
+        if (pqrsAdjunto == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        Usuario usuarioAutenticado = obtenerUsuarioAutenticado();
+        if (usuarioAutenticado == null) {
+            return ResponseEntity.status(401).body("Debes iniciar sesión para consultar este documento.");
+        }
+        boolean esAdministrador = "ADMIN".equalsIgnoreCase(usuarioAutenticado.getRole());
+        boolean esDueno = usuarioAutenticado.getId() != null
+                && usuarioAutenticado.getId().equals(pqrsAdjunto.getUsuarioId());
+        if (!esAdministrador && !esDueno) {
+            return ResponseEntity.status(403).body("No tienes permiso para consultar este documento.");
+        }
+
+        // Las cargas nuevas en producción se leen desde R2. Si el objeto no existe,
+        // se intenta el almacenamiento local para conservar compatibilidad con archivos antiguos.
+        if (r2Enabled) {
+            try {
+                ResponseBytes<GetObjectResponse> objeto = obtenerClienteR2().getObjectAsBytes(
+                        GetObjectRequest.builder()
+                                .bucket(r2Bucket)
+                                .key(nombre)
+                                .build());
+
+                byte[] contenido = objeto.asByteArray();
+                String tipoContenido = obtenerTipoContenido(
+                        nombre, contenido, objeto.response().contentType());
+                return construirRespuestaArchivo(nombre, contenido, tipoContenido);
+            } catch (S3Exception e) {
+                if (e.statusCode() != 404) {
+                    System.err.println("Error leyendo adjunto desde Cloudflare R2: " + e.getClass().getSimpleName());
+                    return ResponseEntity.status(502)
+                            .body("No se pudo consultar el documento en el almacenamiento externo.");
+                }
+                // 404 en R2: puede tratarse de una PQRS antigua guardada localmente.
+            }
+        }
+
+        Path carpetaUploads = Paths.get(uploadDir).toAbsolutePath().normalize();
+        Path ruta = carpetaUploads.resolve(nombre).normalize();
+        if (!ruta.startsWith(carpetaUploads) || !Files.isRegularFile(ruta)) {
             return ResponseEntity.notFound().build();
         }
 
         byte[] contenido = Files.readAllBytes(ruta);
-
-        // Detectar el formato real, aunque el archivo
-        // esté guardado con un nombre UUID sin extensión.
-        String tipoContenido =
-                detectarTipoContenido(ruta, contenido);
-
-        String nombreDescarga = ruta.getFileName().toString();
-        String extension = extensionPorMime(tipoContenido);
-
-        if (!nombreDescarga.contains(".")
-                && !extension.isEmpty()) {
-            nombreDescarga += extension;
-        }
-
-        return ResponseEntity.ok()
-                .contentType(
-                        org.springframework.http.MediaType
-                                .parseMediaType(tipoContenido))
-                .contentLength(contenido.length)
-                .header(
-                        org.springframework.http.HttpHeaders.CONTENT_DISPOSITION,
-                        org.springframework.http.ContentDisposition
-                                .inline()
-                                .filename(
-                                        nombreDescarga,
-                                        java.nio.charset.StandardCharsets.UTF_8)
-                                .build()
-                                .toString())
-                .body(contenido);
+        String tipoContenido = obtenerTipoContenido(nombre, contenido, Files.probeContentType(ruta));
+        return construirRespuestaArchivo(nombre, contenido, tipoContenido);
 
     } catch (Exception e) {
-        e.printStackTrace();
-
+        System.err.println("Error al visualizar archivo adjunto: " + e.getClass().getSimpleName());
         return ResponseEntity.internalServerError()
-                .body("No se pudo visualizar el archivo");
+                .body("No se pudo visualizar el archivo adjunto.");
     }
 }
 
-private String detectarTipoContenido(
-        Path ruta,
-        byte[] contenido) throws java.io.IOException {
+private String sanitizarNombreArchivo(String nombreOriginal) {
+    String nombre = nombreOriginal == null || nombreOriginal.isBlank()
+            ? "documento" : nombreOriginal.replace('\\', '/');
+    nombre = nombre.substring(nombre.lastIndexOf('/') + 1);
+    nombre = nombre.replaceAll("[^\\p{L}\\p{N}._-]", "_");
+    if (nombre.isBlank() || nombre.equals(".") || nombre.equals("..")) {
+        nombre = "documento";
+    }
+    return nombre.length() > 120 ? nombre.substring(nombre.length() - 120) : nombre;
+}
 
+private String obtenerTipoContenido(String nombreArchivo, byte[] contenido, String tipoInformado) {
+    if (tipoInformado != null && !tipoInformado.isBlank()
+            && !"application/octet-stream".equalsIgnoreCase(tipoInformado)) {
+        return tipoInformado;
+    }
+    try {
+        return detectarTipoContenido(Paths.get(nombreArchivo), contenido);
+    } catch (IOException e) {
+        return "application/octet-stream";
+    }
+}
+
+private ResponseEntity<byte[]> construirRespuestaArchivo(
+        String nombreArchivo, byte[] contenido, String tipoContenido) {
+    String nombreDescarga = Paths.get(nombreArchivo).getFileName().toString();
+    String extension = extensionPorMime(tipoContenido);
+    if (!nombreDescarga.contains(".") && !extension.isEmpty()) {
+        nombreDescarga += extension;
+    }
+
+    return ResponseEntity.ok()
+            .contentType(org.springframework.http.MediaType.parseMediaType(tipoContenido))
+            .contentLength(contenido.length)
+            .header(
+                    org.springframework.http.HttpHeaders.CONTENT_DISPOSITION,
+                    org.springframework.http.ContentDisposition.inline()
+                            .filename(nombreDescarga, java.nio.charset.StandardCharsets.UTF_8)
+                            .build()
+                            .toString())
+            .body(contenido);
+}
+
+private String detectarTipoContenido(Path ruta, byte[] contenido) throws IOException {
     // PDF: %PDF-
     if (contenido.length >= 5
             && contenido[0] == '%'
@@ -1085,9 +1246,7 @@ private String detectarTipoContenido(
         String firma = new String(
                 contenido, 0, 6,
                 java.nio.charset.StandardCharsets.US_ASCII);
-
-        if (firma.equals("GIF87a")
-                || firma.equals("GIF89a")) {
+        if (firma.equals("GIF87a") || firma.equals("GIF89a")) {
             return "image/gif";
         }
     }
@@ -1095,46 +1254,26 @@ private String detectarTipoContenido(
     // WEBP
     if (contenido.length >= 12
             && new String(contenido, 0, 4,
-                    java.nio.charset.StandardCharsets.US_ASCII)
-                    .equals("RIFF")
+                    java.nio.charset.StandardCharsets.US_ASCII).equals("RIFF")
             && new String(contenido, 8, 4,
-                    java.nio.charset.StandardCharsets.US_ASCII)
-                    .equals("WEBP")) {
+                    java.nio.charset.StandardCharsets.US_ASCII).equals("WEBP")) {
         return "image/webp";
     }
 
-    // Otros formatos que Java pueda reconocer
-    String tipo = java.nio.file.Files.probeContentType(ruta);
-
-    return tipo != null
-            ? tipo
-            : "application/octet-stream";
+    String tipo = Files.probeContentType(ruta);
+    return tipo != null ? tipo : "application/octet-stream";
 }
-
 
 private String extensionPorMime(String tipo) {
-
     switch (tipo) {
-        case "application/pdf":
-            return ".pdf";
-
-        case "image/png":
-            return ".png";
-
-        case "image/jpeg":
-            return ".jpg";
-
-        case "image/gif":
-            return ".gif";
-
-        case "image/webp":
-            return ".webp";
-
-        default:
-            return "";
+        case "application/pdf": return ".pdf";
+        case "image/png": return ".png";
+        case "image/jpeg": return ".jpg";
+        case "image/gif": return ".gif";
+        case "image/webp": return ".webp";
+        default: return "";
     }
 }
-
 
     @GetMapping("/dashboard")
     public ResponseEntity<?> dashboard() {
